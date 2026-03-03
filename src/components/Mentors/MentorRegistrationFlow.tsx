@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { mentorApi } from '../../api/mentoringApi';
 import { GlassCard } from '../UI/GlassCard';
 import { Button } from '../UI/Button';
 import { Input } from '../UI/Input';
-import { mentorApi } from '../../api/mentoringApi';
+
 
 interface MentorRegistrationData {
   name: string;
@@ -32,6 +33,7 @@ export const MentorRegistrationFlow: React.FC<MentorRegistrationFlowProps> = ({ 
   const [selectionStart, setSelectionStart] = useState<string | null>(null);
   const [hoverTime, setHoverTime] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [data, setData] = useState<MentorRegistrationData>({
     name: userProfile?.name || '', // Default to user profile name
@@ -224,54 +226,60 @@ export const MentorRegistrationFlow: React.FC<MentorRegistrationFlowProps> = ({ 
     return 'default';
   };
 
+  // 프론트엔드 데이터를 백엔드 DTO 형식으로 변환
+  const formatAvailability = (days: string[], times: { [key: string]: string[] }): string[] => {
+    const result: string[] = [];
+    for (const day of days) {
+      const dayTimes = times[day];
+      if (dayTimes && dayTimes.length > 0) {
+        const ranges = getRanges(dayTimes);
+        for (const range of ranges) {
+          result.push(`${day} ${range.start}-${range.end}`);
+        }
+      } else {
+        result.push(day);
+      }
+    }
+    return result;
+  };
+
+  const formatPreferredFormat = (types: string[]): string => {
+    if (types.length === 0) return 'online';
+    if (types.includes('online') && types.includes('offline')) return 'both';
+    if (types.includes('online')) return 'online';
+    if (types.includes('offline')) return 'offline';
+    return types[0];
+  };
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const payload = {
+        name: data.name,
+        title: data.role,
+        company: data.company || undefined,
+        experience: data.years,
+        expertise: data.skills,
+        bio: data.bio,
+        availability: formatAvailability(data.availableDays, data.availableTimes),
+        preferredFormat: formatPreferredFormat(data.mentoringType),
+        certificates: data.certificates
+          ? data.certificates.split(',').map(c => c.trim()).filter(Boolean)
+          : undefined,
+      };
+      await mentorApi.applyMentor(payload);
+      onComplete();
+    } catch (err: any) {
+      setSubmitError(err?.data?.message || err?.message || '멘토 신청 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const totalSteps = 6;
   const progress = ((step + 1) / totalSteps) * 100;
 
-  const handleComplete = async () => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-    console.log('멘토 등록 시작...');
-
-    // Transform data for API
-    const availabilityList: string[] = [];
-    Object.entries(data.availableTimes).forEach(([day, times]) => {
-      (times as string[]).forEach(time => {
-        availabilityList.push(`${day} ${time}`);
-      });
-    });
-
-    const payload = {
-      name: data.name,
-      title: data.role,
-      company: data.company,
-      experience: data.years,
-      expertise: data.skills,
-      bio: data.bio,
-      availability: availabilityList,
-      preferredFormat: data.mentoringType.join(','),
-      certificates: data.certificates.split(',').map(c => c.trim()).filter(Boolean)
-    };
-
-    console.log('Sending payload:', payload);
-
-    try {
-      await mentorApi.applyMentor(payload);
-      console.log('멘토 등록 성공');
-      alert('멘토 등록 신청이 완료되었습니다! 심사 후 연락드리겠습니다.');
-      onComplete();
-    } catch (error: any) {
-      console.error('멘토 등록 실패:', error);
-      setIsSubmitting(false);
-
-      // Handle "Already applied" gracefully
-      if (error?.message?.includes('이미') || error?.response?.data?.message?.includes('이미')) {
-        alert('이미 멘토 등록 신청이 되어있습니다. 심사 결과를 기다려주세요.');
-        onComplete();
-      } else {
-        alert('멘토 등록 신청에 실패했습니다. 다시 시도해주세요.');
-      }
-    }
-  };
 
   // Render Step Content
   const renderStep = () => {
@@ -517,8 +525,19 @@ export const MentorRegistrationFlow: React.FC<MentorRegistrationFlowProps> = ({ 
               </div>
             )}
 
-            <Button variant="neon" onClick={handleComplete} disabled={data.mentoringType.length === 0 || isSubmitting} className="w-full py-4 text-lg mt-6 shadow-cyan-500/30">
-              {isSubmitting ? '등록 중...' : '등록 신청 완료 🚀'}
+            {submitError && (
+              <div className="w-full px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm font-medium text-center animate-fade-in-up">
+                {submitError}
+              </div>
+            )}
+
+            <Button
+              variant="neon"
+              onClick={handleSubmit}
+              disabled={data.mentoringType.length === 0 || isSubmitting}
+              className="w-full py-4 text-lg mt-6 shadow-cyan-500/30"
+            >
+              {isSubmitting ? '신청 중...' : '등록 신청 완료 🚀'}
             </Button>
           </div>
         );

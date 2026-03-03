@@ -22,16 +22,19 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
 
     const [activeModal, setActiveModal] = useState<'none' | 'app-detail'>('none');
     const [isChatOpen, setIsChatOpen] = useState(false);
-    const [selectedChatTarget, setSelectedChatTarget] = useState<{ name: string, role: string, avatar: string, company?: string } | null>(null);
-    const [chatMentorId, setChatMentorId] = useState<number>(0);
+    const [selectedChatTarget, setSelectedChatTarget] = useState<{ name: string, role: string, avatar: string, company?: string, mentorId?: number, menteeUserId?: number } | null>(null);
 
     const [cancelSessionId, setCancelSessionId] = useState<number | null>(null);
+
+    // 받은 멘토링 신청 (멘토용)
+    const [receivedApps, setReceivedApps] = useState<{ id: number, mentorId?: number, menteeUserId?: number, menteeName: string, topic: string, description?: string, status: string, createdAt: string }[]>([]);
+    const [processingAppId, setProcessingAppId] = useState<number | null>(null);
 
     const [selectedCategory, setSelectedCategory] = useState('전체');
 
     const categories = ['전체', 'Frontend', 'Backend', 'AI/ML', 'DevOps', 'Product', 'Design', 'Career'];
 
-    const [sessions, setSessions] = useState<{ id: number, mentorName: string, role: string, company: string, imageUrl: string, date: string, status: string, topic: string }[]>([]);
+    const [sessions, setSessions] = useState<{ id: number, mentorId?: number, mentorName: string, role: string, company: string, imageUrl: string, date: string, status: string, topic: string }[]>([]);
 
     // 백엔드에서 보낸 신청 목록 로드
     useEffect(() => {
@@ -43,12 +46,13 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
                 if (Array.isArray(items) && items.length > 0) {
                     setSessions(items.map((a: any) => ({
                         id: a.id,
+                        mentorId: a.mentorId,
                         mentorName: a.mentorName || a.mentor?.name || '멘토',
                         role: a.mentorRole || a.mentor?.expertise || '',
                         company: a.mentorCompany || a.mentor?.company || '',
                         imageUrl: a.mentorImageUrl || a.mentor?.profileImageUrl || `https://picsum.photos/100/100?random=${a.id}`,
                         date: a.scheduledDate || a.createdAt || '',
-                        status: a.status === 'APPROVED' ? 'confirmed' : 'pending',
+                        status: (a.status || '').toUpperCase() === 'APPROVED' ? 'confirmed' : 'pending',
                         topic: a.topic || a.message || '',
                     })));
                 }
@@ -68,6 +72,58 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
 
     }, [isLoggedIn, token]);
 
+    // 받은 멘토링 신청 로드 (멘토용)
+    useEffect(() => {
+        if (!isLoggedIn || !token) return;
+        const fetchReceivedApplications = async () => {
+            try {
+                const res = await mentoringApplicationApi.getReceivedApplications();
+                const items = res.applications || res;
+                if (Array.isArray(items)) {
+                    setReceivedApps(items.map((a: any) => ({
+                        id: a.id,
+                        mentorId: a.mentorId,
+                        menteeUserId: a.menteeUserId,
+                        menteeName: a.menteeName || a.mentee?.name || '멘티',
+                        topic: a.topic || '',
+                        description: a.description || '',
+                        status: (a.status || 'PENDING').toUpperCase(),
+                        createdAt: a.createdAt || '',
+                    })));
+                }
+            } catch (err) {
+                // 멘토가 아닌 유저는 빈 목록
+            }
+        };
+        fetchReceivedApplications();
+    }, [isLoggedIn, token]);
+
+    // 신청 승인
+    const handleApproveApp = async (appId: number) => {
+        setProcessingAppId(appId);
+        try {
+            await mentoringApplicationApi.approveApplication(appId);
+            setReceivedApps(prev => prev.map(a => a.id === appId ? { ...a, status: 'APPROVED' } : a));
+        } catch (err) {
+            console.error('승인 실패:', err);
+        } finally {
+            setProcessingAppId(null);
+        }
+    };
+
+    // 신청 거절
+    const handleRejectApp = async (appId: number) => {
+        setProcessingAppId(appId);
+        try {
+            await mentoringApplicationApi.rejectApplication(appId);
+            setReceivedApps(prev => prev.map(a => a.id === appId ? { ...a, status: 'REJECTED' } : a));
+        } catch (err) {
+            console.error('거절 실패:', err);
+        } finally {
+            setProcessingAppId(null);
+        }
+    };
+
     // Handle Cancel Session (Open Modal)
     const handleCancelClick = (id: number) => {
         setCancelSessionId(id);
@@ -82,9 +138,8 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
     };
 
     // Chat Handlers
-    const handleOpenChat = (name: string, role: string, avatar: string, company: string, mentorId?: number) => {
-        setChatMentorId(mentorId || 0);
-        setSelectedChatTarget({ name, role, avatar, company });
+    const handleOpenChat = (name: string, role: string, avatar: string, company: string, mentorId?: number, menteeUserId?: number) => {
+        setSelectedChatTarget({ name, role, avatar, company, mentorId, menteeUserId });
         setIsChatOpen(true);
     };
 
@@ -167,6 +222,81 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
                 </div>
             )}
 
+            {/* Section: Received Applications (멘토용) */}
+            {receivedApps.length > 0 && (
+                <section>
+                    <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                        📬 받은 멘토링 신청
+                        <span className="text-sm font-normal text-gray-400 ml-1">
+                            {receivedApps.filter(a => a.status === 'PENDING').length}건 대기 중
+                        </span>
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {receivedApps.map(app => (
+                            <GlassCard key={app.id} className="p-5 flex flex-col gap-3 hover:border-purple-300 transition-colors">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h4 className="font-bold text-gray-900 text-lg">{app.menteeName}</h4>
+                                        <p className="text-xs text-gray-500 mt-0.5">
+                                            {app.createdAt ? new Date(app.createdAt).toLocaleDateString('ko-KR') : ''}
+                                        </p>
+                                    </div>
+                                    <span className={`px-2 py-1 rounded text-xs font-bold ${app.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
+                                        app.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
+                                            'bg-yellow-100 text-yellow-700'
+                                        }`}>
+                                        {app.status === 'APPROVED' ? '승인됨' : app.status === 'REJECTED' ? '거절됨' : '대기 중'}
+                                    </span>
+                                </div>
+                                <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
+                                    <div className="flex gap-2">
+                                        <span className="text-gray-400 w-10 flex-shrink-0">주제</span>
+                                        <span className="text-gray-700 font-medium">{app.topic}</span>
+                                    </div>
+                                    {app.description && (
+                                        <div className="flex gap-2">
+                                            <span className="text-gray-400 w-10 flex-shrink-0">설명</span>
+                                            <span className="text-gray-700 line-clamp-2">{app.description}</span>
+                                        </div>
+                                    )}
+                                </div>
+                                {app.status === 'PENDING' && (
+                                    <div className="flex gap-2 mt-1">
+                                        <Button
+                                            variant="primary"
+                                            className="flex-1 py-2 text-xs bg-green-600 hover:bg-green-700 border-none shadow-green-500/30"
+                                            onClick={() => handleApproveApp(app.id)}
+                                            disabled={processingAppId === app.id}
+                                        >
+                                            {processingAppId === app.id ? '처리 중...' : '✅ 승인'}
+                                        </Button>
+                                        <Button
+                                            variant="secondary"
+                                            className="flex-1 py-2 text-xs text-red-500 hover:text-red-600 hover:border-red-200"
+                                            onClick={() => handleRejectApp(app.id)}
+                                            disabled={processingAppId === app.id}
+                                        >
+                                            🚫 거절
+                                        </Button>
+                                    </div>
+                                )}
+                                {app.status === 'APPROVED' && (
+                                    <div className="flex gap-2 mt-1">
+                                        <Button
+                                            variant="secondary"
+                                            className="flex-1 py-2 text-xs flex items-center justify-center gap-1 hover:text-cyan-600 hover:border-cyan-200"
+                                            onClick={() => handleOpenChat(app.menteeName, app.topic || '멘티', `https://picsum.photos/100/100?random=${app.id}`, '', app.mentorId, app.menteeUserId)}
+                                        >
+                                            💬 채팅
+                                        </Button>
+                                    </div>
+                                )}
+                            </GlassCard>
+                        ))}
+                    </div>
+                </section>
+            )}
+
             {/* Section 1: My Mentoring */}
             <section>
                 <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
@@ -198,13 +328,24 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
                                 </div>
                             </div>
                             <div className="flex gap-2 mt-1">
-                                <Button
-                                    variant="secondary"
-                                    className="flex-1 py-2 text-xs flex items-center justify-center gap-1 hover:text-cyan-600 hover:border-cyan-200"
-                                    onClick={() => handleOpenChat(session.mentorName, session.role, session.imageUrl, session.company)}
-                                >
-                                    💬 채팅
-                                </Button>
+                                {session.status === 'confirmed' ? (
+                                    <Button
+                                        variant="secondary"
+                                        className="flex-1 py-2 text-xs flex items-center justify-center gap-1 hover:text-cyan-600 hover:border-cyan-200"
+                                        onClick={() => handleOpenChat(session.mentorName, session.role, session.imageUrl, session.company, session.mentorId)}
+                                    >
+                                        💬 채팅
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        variant="secondary"
+                                        className="flex-1 py-2 text-xs text-gray-300 cursor-not-allowed border-gray-100"
+                                        disabled
+                                        title="멘토링 승인 후 채팅이 가능합니다"
+                                    >
+                                        🔒 승인 후 채팅 가능
+                                    </Button>
+                                )}
                                 <Button
                                     variant="secondary"
                                     className="flex-1 py-2 text-xs text-gray-400 hover:text-red-500 hover:border-red-200"
@@ -344,7 +485,8 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
                 <ChatModal
                     isOpen={isChatOpen}
                     onClose={() => setIsChatOpen(false)}
-                    mentorId={chatMentorId}
+                    mentorId={selectedChatTarget.mentorId}
+                    menteeUserId={selectedChatTarget.menteeUserId}
                     target={selectedChatTarget}
                 />
             )}

@@ -24,13 +24,13 @@ export const mentorApi = {
     applyMentor: (data: {
         name: string;
         title: string;
-        company: string;
+        company?: string;
         experience: string;
         expertise: string[];
         bio: string;
         availability: string[];
         preferredFormat: string;
-        certificates: string[];
+        certificates?: string[];
     }) => apiClient.post('/api/mentors/apply', data),
 
     /** 내 멘토 프로필 조회 - GET /api/mentors/me */
