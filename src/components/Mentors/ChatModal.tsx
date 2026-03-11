@@ -377,15 +377,15 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
                     {msg.text}
                   </div>
                 ) : (
-                  <div key={msg.id || idx} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`flex flex-col ${msg.sender === 'me' ? 'items-end' : 'items-start'} max-w-[70%]`}>
+                  <div key={msg.id || idx} className={`flex ${msg.sender === 'me' ? 'justify-start' : 'justify-end'}`}>
+                    <div className={`flex flex-col ${msg.sender === 'me' ? 'items-start' : 'items-end'} max-w-[70%]`}>
                       {msg.sender === 'other' && msg.senderName && (
                         <span className="text-[11px] text-gray-500 mb-1 px-1">{msg.senderName}</span>
                       )}
                       <div
                         className={`px-5 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.sender === 'me'
-                          ? 'bg-gradient-to-br from-cyan-500 to-blue-500 text-white rounded-tr-none'
-                          : 'bg-white border border-gray-200 text-gray-700 rounded-tl-none'
+                          ? 'bg-gradient-to-br from-cyan-500 to-blue-500 text-white rounded-tl-none'
+                          : 'bg-white border border-gray-200 text-gray-700 rounded-tr-none'
                           }`}
                       >
                         {msg.text}
