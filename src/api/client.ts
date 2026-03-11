@@ -3,7 +3,7 @@
  * 백엔드 REST API 호출 시 사용합니다.
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://3.35.37.53';
 
 // 토큰 가져오기 (추후 인증 연동 시 구현)
 const getToken = (): string | null => {
