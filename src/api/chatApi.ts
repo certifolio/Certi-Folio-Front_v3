@@ -24,8 +24,4 @@ export const chatApi = {
     /** REST로 메시지 전송 - POST /api/chat/rooms/:id/send */
     sendMessage: (chatRoomId: number, content: string) =>
         apiClient.post(`/api/chat/rooms/${chatRoomId}/send`, { content }),
-
-    /** 재접속 시 누락 메시지 동기화 - GET /api/chat/rooms/:id/sync?lastSeq=N */
-    syncMessages: (chatRoomId: number, lastSeq: number) =>
-        apiClient.get(`/api/chat/rooms/${chatRoomId}/sync?lastSeq=${lastSeq}`),
 };

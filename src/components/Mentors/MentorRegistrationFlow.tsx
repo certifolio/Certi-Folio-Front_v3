@@ -5,6 +5,7 @@ import { GlassCard } from '../UI/GlassCard';
 import { Button } from '../UI/Button';
 import { Input } from '../UI/Input';
 
+
 interface MentorRegistrationData {
   name: string;
   company: string;
@@ -278,6 +279,7 @@ export const MentorRegistrationFlow: React.FC<MentorRegistrationFlowProps> = ({ 
 
   const totalSteps = 6;
   const progress = ((step + 1) / totalSteps) * 100;
+
 
   // Render Step Content
   const renderStep = () => {

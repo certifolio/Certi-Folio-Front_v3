@@ -1,0 +1,33 @@
+name: React Deploy to EC2
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. 프론트엔드 코드 가져오기
+        uses: actions/checkout@v4
+
+      - name: 2. Node.js 세팅
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 3. 패키지 설치 및 React 빌드
+        run: |
+          npm install
+          npm run build
+
+      - name: 4. 완성된 화면 파일들을 EC2 프론트엔드 폴더로 전달
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_KEY }}
+          # 💡 [매우 중요] Vite로 만들었다면 "build/*" 대신 "dist/*" 로 꼭 바꿔주세요!
+          source: "dist/*"
+          target: "~/frontend"
+          strip_components: 1

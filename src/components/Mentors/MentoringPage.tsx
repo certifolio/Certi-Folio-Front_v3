@@ -4,7 +4,7 @@ import { MentorRegistrationFlow } from './MentorRegistrationFlow';
 import { GlassCard } from '../UI/GlassCard';
 import { Button } from '../UI/Button';
 import { ChatModal } from './ChatModal';
-import { mentoringApplicationApi } from '../../api/mentoringApi';
+import { mentoringApplicationApi, mentorApi } from '../../api/mentoringApi';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface MentoringPageProps {
@@ -61,6 +61,15 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
             }
         };
         fetchSentApplications();
+
+        // Check Mentor Application Status
+        mentorApi.getMyMentorProfile()
+            .then((res: any) => {
+                if (res.status === 'PENDING') setAppStatus('pending');
+                else if (res.status === 'APPROVED') setAppStatus('approved');
+            })
+            .catch(() => setAppStatus('none'));
+
     }, [isLoggedIn, token]);
 
     // 받은 멘토링 신청 로드 (멘토용)
@@ -476,9 +485,9 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
                 <ChatModal
                     isOpen={isChatOpen}
                     onClose={() => setIsChatOpen(false)}
-                    target={selectedChatTarget}
                     mentorId={selectedChatTarget.mentorId}
                     menteeUserId={selectedChatTarget.menteeUserId}
+                    target={selectedChatTarget}
                 />
             )}
 

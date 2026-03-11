@@ -25,7 +25,6 @@ interface ChatMessage {
   senderName?: string;
   text: string;
   sentAt?: string;
-  sequenceNumber?: number;
 }
 
 export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId, menteeUserId, target }) => {
@@ -41,7 +40,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
   const scrollRef = useRef<HTMLDivElement>(null);
   const stompClientRef = useRef<Client | null>(null);
   const messageIdsRef = useRef<Set<number>>(new Set());
-  const lastSeqRef = useRef<number>(0);
 
   // Quick Replies
   const quickReplies = [
@@ -59,34 +57,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
     senderName: m.senderName,
     text: m.content,
     sentAt: m.sentAt,
-    sequenceNumber: m.sequenceNumber,
   }), [currentUserId]);
-
-  // sequenceNumber 기준 정렬 헬퍼
-  const sortBySeq = (msgs: ChatMessage[]) =>
-    msgs.sort((a, b) => (a.sequenceNumber ?? 0) - (b.sequenceNumber ?? 0));
-
-  // lastSeqRef 갱신 헬퍼
-  const updateLastSeq = useCallback((seq?: number) => {
-    if (seq && seq > lastSeqRef.current) {
-      lastSeqRef.current = seq;
-    }
-  }, []);
-
-  // ACK 전송 헬퍼
-  const sendAck = useCallback((roomId: number, messageId: number) => {
-    if (stompClientRef.current?.connected && userProfile) {
-      const userSubject = `${userProfile.provider}:${userProfile.id}`;
-      stompClientRef.current.publish({
-        destination: `/app/chat.ack/${roomId}`,
-        body: JSON.stringify({
-          chatRoomId: roomId,
-          messageId: messageId,
-          senderSubject: userSubject,
-        }),
-      });
-    }
-  }, [userProfile]);
 
   // Connect WebSocket STOMP
   const connectWebSocket = useCallback((roomId: number) => {
@@ -109,35 +80,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
       console.log('[WebSocket] 연결 성공, 채팅방 구독:', roomId);
       setWsConnected(true);
 
-      // 재접속 시 누락 메시지 동기화
-      if (lastSeqRef.current > 0) {
-        console.log('[Sync] 재접속 감지, lastSeq:', lastSeqRef.current);
-        chatApi.syncMessages(roomId, lastSeqRef.current)
-          .then((res: any) => {
-            const missed = res.messages || [];
-            if (missed.length > 0) {
-              console.log('[Sync] 누락 메시지 복구:', missed.length, '건');
-              const mapped = missed.map((m: any) => mapMessage(m));
-              setHistory(prev => {
-                const merged = [...prev];
-                mapped.forEach((m: ChatMessage) => {
-                  if (!m.id || !messageIdsRef.current.has(m.id)) {
-                    merged.push(m);
-                    if (m.id) messageIdsRef.current.add(m.id);
-                    updateLastSeq(m.sequenceNumber);
-                    // 누락 메시지에 대해서도 ACK 전송
-                    if (m.sender !== 'me' && m.id) {
-                      sendAck(roomId, m.id);
-                    }
-                  }
-                });
-                return sortBySeq(merged);
-              });
-            }
-          })
-          .catch((err: any) => console.error('[Sync] 누락 메시지 복구 실패:', err));
-      }
-
       // 채팅방 토픽 구독
       client.subscribe(`/topic/chat.${roomId}`, (msg: IMessage) => {
         try {
@@ -151,14 +93,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
 
           if (newMsg.id) {
             messageIdsRef.current.add(newMsg.id);
-          }
-
-          // lastSeqRef 갱신
-          updateLastSeq(newMsg.sequenceNumber);
-
-          // 내가 보낸 메시지가 아니면 ACK 전송
-          if (newMsg.sender !== 'me' && newMsg.id) {
-            sendAck(roomId, newMsg.id);
           }
 
           setHistory(prev => {
@@ -175,10 +109,10 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
                   }
                   return m;
                 });
-                return sortBySeq(updated);
+                return updated;
               }
             }
-            return sortBySeq([...prev, newMsg]);
+            return [...prev, newMsg];
           });
         } catch (e) {
           console.error('[WebSocket] 메시지 파싱 에러:', e);
@@ -198,7 +132,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
 
     client.activate();
     stompClientRef.current = client;
-  }, [mapMessage, sendAck, updateLastSeq]);
+  }, [mapMessage]);
 
   // Initialize: create/get room, load history, connect WebSocket
   useEffect(() => {
@@ -225,9 +159,8 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
             const mapped = messages.map((m: any) => mapMessage(m));
             mapped.forEach((m: ChatMessage) => {
               if (m.id) messageIdsRef.current.add(m.id);
-              updateLastSeq(m.sequenceNumber);
             });
-            setHistory(sortBySeq(mapped));
+            setHistory(mapped);
           }
         } catch {
           // 메시지 없을 수 있음
@@ -257,7 +190,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
       }
       setWsConnected(false);
     };
-  }, [isOpen, mentorId, connectWebSocket, mapMessage, updateLastSeq]);
+  }, [isOpen, mentorId, connectWebSocket, mapMessage]);
 
   // Cleanup on close
   useEffect(() => {
@@ -271,7 +204,6 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
       setError(null);
       setWsConnected(false);
       messageIdsRef.current = new Set();
-      lastSeqRef.current = 0;
     }
   }, [isOpen]);
 
@@ -377,15 +309,15 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
                     {msg.text}
                   </div>
                 ) : (
-                  <div key={msg.id || idx} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`flex flex-col ${msg.sender === 'me' ? 'items-end' : 'items-start'} max-w-[70%]`}>
+                  <div key={msg.id || idx} className={`flex ${msg.sender === 'me' ? 'justify-start' : 'justify-end'}`}>
+                    <div className={`flex flex-col ${msg.sender === 'me' ? 'items-start' : 'items-end'} max-w-[70%]`}>
                       {msg.sender === 'other' && msg.senderName && (
                         <span className="text-[11px] text-gray-500 mb-1 px-1">{msg.senderName}</span>
                       )}
                       <div
                         className={`px-5 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.sender === 'me'
-                          ? 'bg-gradient-to-br from-cyan-500 to-blue-500 text-white rounded-tr-none'
-                          : 'bg-white border border-gray-200 text-gray-700 rounded-tl-none'
+                          ? 'bg-gradient-to-br from-cyan-500 to-blue-500 text-white rounded-tl-none'
+                          : 'bg-white border border-gray-200 text-gray-700 rounded-tr-none'
                           }`}
                       >
                         {msg.text}

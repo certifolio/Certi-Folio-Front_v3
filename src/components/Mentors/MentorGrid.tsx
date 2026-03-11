@@ -26,6 +26,7 @@ export const MentorGrid: React.FC<MentorGridProps> = ({ limit, showAll, filterCa
     // Chat Modal States
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [chatTarget, setChatTarget] = useState<{ name: string, role: string, avatar: string, company: string } | null>(null);
+    const [chatMentorId, setChatMentorId] = useState<number>(0);
 
     // 백엔드에서 멘토 목록 불러오기
     useEffect(() => {
@@ -72,20 +73,20 @@ export const MentorGrid: React.FC<MentorGridProps> = ({ limit, showAll, filterCa
             await mentoringApplicationApi.createApplication({
                 mentorId: Number(selectedMentor.id),
                 topic: applyTopic,
-                message: applyMessage,
+                description: applyMessage,
             });
             alert('멘토링 신청이 완료되었습니다!');
             closeModal();
         } catch (err) {
-            console.warn('신청 API 실패:', err);
-            alert('신청되었습니다!');
-            closeModal();
+            console.error('신청 API 실패:', err);
+            alert('멘토링 신청에 실패했습니다. 다시 시도해주세요.');
         } finally {
             setIsApplying(false);
         }
     };
 
     const handleOpenChat = (mentor: Mentor) => {
+        setChatMentorId(Number(mentor.id));
         setChatTarget({
             name: mentor.name,
             role: mentor.role,
@@ -203,6 +204,7 @@ export const MentorGrid: React.FC<MentorGridProps> = ({ limit, showAll, filterCa
                 <ChatModal
                     isOpen={isChatOpen}
                     onClose={() => setIsChatOpen(false)}
+                    mentorId={chatMentorId}
                     target={chatTarget}
                 />
             )}
