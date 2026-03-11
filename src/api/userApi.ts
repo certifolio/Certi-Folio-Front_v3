@@ -40,7 +40,7 @@ export const userApi = {
         const headers: HeadersInit = {};
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
-        return fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8080'}/api/user/profile-image`, {
+        return fetch(`${import.meta.env.VITE_API_URL || 'http://3.35.37.53'}/api/user/profile-image`, {
             method: 'POST',
             headers,
             body: formData,
