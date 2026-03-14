@@ -41,7 +41,7 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('access_token'));
     const [token, setToken] = useState<string | null>(localStorage.getItem('access_token'));
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
