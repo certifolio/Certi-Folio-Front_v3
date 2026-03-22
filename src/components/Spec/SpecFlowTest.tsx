@@ -9,6 +9,7 @@ import { CertificateFlow, CertificateData } from './CertificateFlow';
 import { CareerFlow, CareerData } from './CareerFlow';
 import { SpecReport } from './SpecReport';
 import { portfolioApi, userApi } from '../../api/userApi';
+import { analyticsApi, type AnalyticsResult } from '../../api/analyticsApi';
 import { useAuth } from '../../contexts/AuthContext';
 
 // Define the full structure of the data we are collecting
@@ -81,6 +82,8 @@ export const SpecFlowTest: React.FC = () => {
   const [stage, setStage] = useState<FlowStage>('intro');
   const [isAnimating, setIsAnimating] = useState(false);
   const [solvedIdInput, setSolvedIdInput] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analyticsResult, setAnalyticsResult] = useState<AnalyticsResult | null>(null);
 
   // Check if user has already input info
   useEffect(() => {
@@ -162,23 +165,59 @@ export const SpecFlowTest: React.FC = () => {
     loadFromBackend();
   }, [isLoggedIn, token]);
 
-  // 백엔드에 포트폴리오 데이터 동기화
+  // 백엔드에 포트폴리오 데이터 동기화 (프론트 필드명 → 백엔드 DTO 필드명 변환)
   const syncToBackend = useCallback(async (data: FullUserData) => {
     if (!isLoggedIn || !token) return;
     try {
       await Promise.allSettled([
+        // 자격증: date→issueDate, certId→certificateNumber (CertificateDTO @JsonAlias로 처리됨)
         data.certificates.length > 0 ? portfolioApi.saveCertificates(data.certificates) : Promise.resolve(),
-        data.projects.length > 0 ? portfolioApi.saveProjects(data.projects) : Promise.resolve(),
-        data.activities.length > 0 ? portfolioApi.saveActivities(data.activities) : Promise.resolve(),
-        data.careers.length > 0 ? portfolioApi.saveCareers(data.careers) : Promise.resolve(),
+
+        // 프로젝트: projectName→name, isTeam→type, links→githubLink/demoLink, techStack[]→String, outcome→result
+        data.projects.length > 0 ? portfolioApi.saveProjects(data.projects.map(p => ({
+          name: p.projectName,
+          type: p.isTeam,
+          role: p.role,
+          techStack: Array.isArray(p.techStack) ? p.techStack.join(', ') : p.techStack,
+          description: p.description,
+          githubLink: p.links?.github || '',
+          demoLink: p.links?.demo || '',
+          result: p.outcome,
+          startDate: p.startDate,
+          endDate: p.endDate,
+        }))) : Promise.resolve(),
+
+        // 대외활동: activityName→name, activityType→type, achievement→result
+        data.activities.length > 0 ? portfolioApi.saveActivities(data.activities.map(a => ({
+          name: a.activityName,
+          type: a.activityType,
+          role: a.role,
+          startDate: a.startDate,
+          endDate: a.endDate,
+          description: a.description,
+          result: a.achievement,
+        }))) : Promise.resolve(),
+
+        // 경력: companyName→company, department를 position으로 병합
+        data.careers.length > 0 ? portfolioApi.saveCareers(data.careers.map(c => ({
+          type: c.type,
+          company: c.companyName,
+          position: c.position || c.department,
+          startDate: c.startDate,
+          endDate: c.endDate,
+          description: c.description,
+        }))) : Promise.resolve(),
+
+        // 학력: academicStatus→status, gpa/maxGpa String→Number
         data.schoolName ? portfolioApi.saveEducations([{
           schoolName: data.schoolName,
           major: data.major,
           degree: data.degree,
+          status: data.academicStatus,
           startDate: data.startDate,
           endDate: data.endDate,
-          gpa: data.gpa,
-          maxGpa: data.maxGpa,
+          gpa: data.gpa ? parseFloat(data.gpa) : null,
+          maxGpa: data.maxGpa ? parseFloat(data.maxGpa) : null,
         }]) : Promise.resolve(),
       ]);
       console.log('포트폴리오 데이터 백엔드 동기화 완료');
@@ -241,17 +280,42 @@ export const SpecFlowTest: React.FC = () => {
   const handleBasicInfoComplete = async (data: any) => {
     setUserData(prev => ({ ...prev, ...data }));
 
-    // Save to Backend (Name & isInfoInputted)
+    // 이름만 저장, isInfoInputted는 마지막 단계에서만 true로 설정
     if (isLoggedIn && data.name) {
       try {
-        await userApi.updateBasicInfo({ name: data.name, isInfoInputted: true });
-        await refreshProfile();
+        await userApi.updateBasicInfo({ name: data.name, isInfoInputted: false });
       } catch (e) {
         console.error("Failed to update basic info", e);
       }
     }
 
     setStage('prompt_edu');
+  };
+
+  // 모든 데이터 저장 완료 후 isInfoInputted = true 설정
+  const completeInfoInput = async (data: FullUserData) => {
+    await syncToBackend(data);
+    if (isLoggedIn) {
+      try {
+        await userApi.updateBasicInfo({ name: data.name, isInfoInputted: true });
+        await refreshProfile();
+      } catch (e) {
+        console.error("Failed to complete info input", e);
+      }
+    }
+  };
+
+  // 데이터 저장 + AI 분석을 순서대로 실행
+  const completeAndAnalyze = async (data: FullUserData) => {
+    setIsAnalyzing(true);
+    try {
+      await completeInfoInput(data);
+      const result = await analyticsApi.analyzePortfolio().catch(() => null);
+      setAnalyticsResult(result);
+    } finally {
+      setIsAnalyzing(false);
+      setStage('finished');
+    }
   };
 
   const handleEduPromptSelection = (choice: 'yes' | 'no') => {
@@ -324,19 +388,15 @@ export const SpecFlowTest: React.FC = () => {
     else setStage('prompt_etc');
   };
 
-  const handleEtcPromptSelection = (choice: 'yes' | 'no') => {
+  const handleEtcPromptSelection = async (choice: 'yes' | 'no') => {
     if (choice === 'yes') setStage('etc');
-    else {
-      syncToBackend(userData);
-      setStage('finished');
-    }
+    else await completeAndAnalyze(userData);
   };
 
-  const handleEtcComplete = () => {
+  const handleEtcComplete = async () => {
     const updated = { ...userData, solvedAcId: solvedIdInput };
     setUserData(updated);
-    syncToBackend(updated);
-    setStage('finished');
+    await completeAndAnalyze(updated);
   };
 
   const handleReset = () => {
@@ -344,10 +404,23 @@ export const SpecFlowTest: React.FC = () => {
     window.location.href = '/';
   };
 
+  // AI 분석 로딩 화면
+  if (isAnalyzing) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-160px)] px-4 w-full max-w-5xl mx-auto">
+        <GlassCard className="w-full p-16 flex flex-col items-center justify-center shadow-2xl border-white/80 min-h-[500px]">
+          <div className="w-20 h-20 rounded-full border-4 border-cyan-500 border-t-transparent animate-spin mb-8" />
+          <h2 className="text-3xl font-extrabold text-gray-900 mb-4 text-center">AI가 포트폴리오를 분석 중입니다</h2>
+          <p className="text-gray-500 text-lg text-center">데이터를 저장하고 분석 결과를 생성하고 있어요.<br />잠시만 기다려주세요...</p>
+        </GlassCard>
+      </div>
+    );
+  }
+
   // Render logic for success screen -> Now SpecReport
   if (stage === 'finished') {
     return (
-      <SpecReport userData={userData} onGoToDashboard={() => window.location.href = '/'} />
+      <SpecReport analyticsData={analyticsResult} onGoToDashboard={() => window.location.href = '/'} />
     );
   }
 
