@@ -1,6 +1,6 @@
 /**
- * Analytics API
- * 백엔드 엔드포인트: /api/analytics
+ * Analytics & Dashboard API
+ * 백엔드 엔드포인트: /api/analytics, /api/dashboard
  */
 import { apiClient } from './client';
 

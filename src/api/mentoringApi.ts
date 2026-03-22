@@ -48,7 +48,7 @@ export const mentoringApplicationApi = {
     /** 멘토링 신청 - POST /api/mentoring-applications */
     createApplication: (data: {
         mentorId: number;
-        message?: string;
+        description?: string;
         topic?: string;
     }) => apiClient.post('/api/mentoring-applications', data),
 

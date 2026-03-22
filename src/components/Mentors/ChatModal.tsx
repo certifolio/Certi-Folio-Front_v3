@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import SockJS from 'sockjs-client';
 import { Client, IMessage } from '@stomp/stompjs';
 
-const WS_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const WS_BASE_URL = import.meta.env.VITE_API_URL || 'http://ec2-3-35-37-53.ap-northeast-2.compute.amazonaws.com';
 
 interface ChatModalProps {
   isOpen: boolean;
@@ -102,13 +102,14 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
               if (hasOptimistic) {
                 // 첫 번째 optimistic 메시지를 서버 확인 메시지로 교체
                 let replaced = false;
-                return prev.map(m => {
+                const updated = prev.map(m => {
                   if (!replaced && !m.id && m.sender === 'me') {
                     replaced = true;
                     return newMsg;
                   }
                   return m;
                 });
+                return updated;
               }
             }
             return [...prev, newMsg];
@@ -156,7 +157,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
           const messages = historyRes.messages || [];
           if (Array.isArray(messages) && messages.length > 0) {
             const mapped = messages.map((m: any) => mapMessage(m));
-            mapped.forEach((m: ChatMessage) => { if (m.id) messageIdsRef.current.add(m.id); });
+            mapped.forEach((m: ChatMessage) => {
+              if (m.id) messageIdsRef.current.add(m.id);
+            });
             setHistory(mapped);
           }
         } catch {
@@ -306,15 +309,15 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
                     {msg.text}
                   </div>
                 ) : (
-                  <div key={msg.id || idx} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`flex flex-col ${msg.sender === 'me' ? 'items-end' : 'items-start'} max-w-[70%]`}>
+                  <div key={msg.id || idx} className={`flex ${msg.sender === 'me' ? 'justify-start' : 'justify-end'}`}>
+                    <div className={`flex flex-col ${msg.sender === 'me' ? 'items-start' : 'items-end'} max-w-[70%]`}>
                       {msg.sender === 'other' && msg.senderName && (
                         <span className="text-[11px] text-gray-500 mb-1 px-1">{msg.senderName}</span>
                       )}
                       <div
                         className={`px-5 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.sender === 'me'
-                          ? 'bg-gradient-to-br from-cyan-500 to-blue-500 text-white rounded-tr-none'
-                          : 'bg-white border border-gray-200 text-gray-700 rounded-tl-none'
+                          ? 'bg-gradient-to-br from-cyan-500 to-blue-500 text-white rounded-tl-none'
+                          : 'bg-white border border-gray-200 text-gray-700 rounded-tr-none'
                           }`}
                       >
                         {msg.text}

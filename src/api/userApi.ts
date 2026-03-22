@@ -11,103 +11,99 @@ export const userApi = {
     getMyProfile: () =>
         apiClient.get('/api/user/me'),
 
-    /** 기본 정보 업데이트 (이름, 정보 입력 완료 여부) - PATCH /api/user/basic-info */
-    updateBasicInfo: (data: { name: string; isInfoInputted?: boolean; birthYear?: string }) =>
-        apiClient.patch('/api/user/basic-info', data),
+    /** 닉네임 설정 - PUT /api/user/nickname */
+    setNickname: (nickname: string) =>
+        apiClient.put('/api/user/nickname', { nickname }),
 
-    /** 온보딩: 이름, 출생연도, 희망 직무, 희망 기업 유형 한 번에 저장 - PATCH /api/user/onboarding */
-    saveOnboarding: (data: { name: string; birthYear?: string; jobRole?: string; companyType?: string }) =>
-        apiClient.patch('/api/user/onboarding', data),
+    /** 닉네임 중복 확인 - GET /api/user/nickname/check */
+    checkNickname: (nickname: string) =>
+        apiClient.get(`/api/user/nickname/check?nickname=${encodeURIComponent(nickname)}`),
+
+    /** 프로필 수정 - PATCH /api/user/profile */
+    updateProfile: (data: {
+        nickname?: string;
+        phone?: string;
+        location?: string;
+        university?: string;
+        major?: string;
+        year?: string;
+        company?: string;
+        bio?: string;
+    }) => apiClient.patch('/api/user/profile', data),
+
+    /** 프로필 이미지 업로드 - POST /api/user/profile-image */
+    uploadProfileImage: (file: File) => {
+        const formData = new FormData();
+        formData.append('image', file);
+        // 이미지 업로드는 Content-Type을 직접 설정하지 않음 (FormData가 자동 처리)
+        const token = localStorage.getItem('access_token');
+        const headers: HeadersInit = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        return fetch(`${import.meta.env.VITE_API_URL || 'http://ec2-3-35-37-53.ap-northeast-2.compute.amazonaws.com'}/api/user/profile-image`, {
+            method: 'POST',
+            headers,
+            body: formData,
+        }).then(res => res.json());
+    },
+
+    /** 기본 정보 업데이트 (이름, 정보 입력 완료 여부) - PATCH /api/user/basic-info */
+    updateBasicInfo: (data: { name: string; isInfoInputted?: boolean }) =>
+        apiClient.patch('/api/user/basic-info', data),
 };
 
 // ===== Portfolio =====
 
 export const portfolioApi = {
-
-    // 1. 학력
-    getEducation: () =>
-        apiClient.get('/api/portfolio/educations'),
-    saveEducation: (education: any) =>
-        apiClient.post('/api/portfolio/educations', education),
-
-    // 2. 프로젝트
-    getProjects: () =>
-        apiClient.get('/api/portfolio/projects'),
-    saveProjects: (projects: any[]) =>
-        apiClient.post('/api/portfolio/projects', projects),
-    addProject: (project: any) =>
-        apiClient.post('/api/portfolio/projects/add', project),
-    deleteProject: (id: number) =>
-        apiClient.delete(`/api/portfolio/projects/${id}`),
-    updateProject: (id: string, project: any) =>
-        apiClient.put(`/api/portfolio/projects/${id}`, project),
-
-    // 3. 활동
-    getActivities: () =>
-        apiClient.get('/api/portfolio/activities'),
-    saveActivities: (activities: any[]) =>
-        apiClient.post('/api/portfolio/activities', activities),
-    addActivity: (activity: any) =>
-        apiClient.post('/api/portfolio/activities/add', activity),
-    deleteActivity: (id: number) =>
-        apiClient.delete(`/api/portfolio/activities/${id}`),
-    updateActivity: (id: string, activity: any) =>
-        apiClient.put(`/api/portfolio/activities/${id}`, activity),
-
-    // 4. 자격증
+    /** 자격증 목록 조회 - GET /api/portfolio/certificates */
     getCertificates: () =>
         apiClient.get('/api/portfolio/certificates'),
+
+    /** 자격증 저장 (전체 교체) - POST /api/portfolio/certificates */
     saveCertificates: (certificates: any[]) =>
         apiClient.post('/api/portfolio/certificates', certificates),
+
+    /** 자격증 단건 추가 - POST /api/portfolio/certificates/add */
     addCertificate: (certificate: any) =>
         apiClient.post('/api/portfolio/certificates/add', certificate),
+
+    /** 자격증 삭제 - DELETE /api/portfolio/certificates/:id */
     deleteCertificate: (id: number) =>
         apiClient.delete(`/api/portfolio/certificates/${id}`),
-    updateCertificate: (id: string, certificate: any) =>
-        apiClient.put(`/api/portfolio/certificates/${id}`, certificate),
 
-    // 5. 경력
+    /** 프로젝트 목록 조회 - GET /api/portfolio/projects */
+    getProjects: () =>
+        apiClient.get('/api/portfolio/projects'),
+
+    /** 프로젝트 저장 - POST /api/portfolio/projects */
+    saveProjects: (projects: any[]) =>
+        apiClient.post('/api/portfolio/projects', projects),
+
+    /** 프로젝트 삭제 - DELETE /api/portfolio/projects/:id */
+    deleteProject: (id: number) =>
+        apiClient.delete(`/api/portfolio/projects/${id}`),
+
+    /** 활동 목록 조회 - GET /api/portfolio/activities */
+    getActivities: () =>
+        apiClient.get('/api/portfolio/activities'),
+
+    /** 활동 저장 - POST /api/portfolio/activities */
+    saveActivities: (activities: any[]) =>
+        apiClient.post('/api/portfolio/activities', activities),
+
+    /** 경력 목록 조회 - GET /api/portfolio/careers */
     getCareers: () =>
         apiClient.get('/api/portfolio/careers'),
+
+    /** 경력 저장 - POST /api/portfolio/careers */
     saveCareers: (careers: any[]) =>
         apiClient.post('/api/portfolio/careers', careers),
-    addCareer: (career: any) =>
-        apiClient.post('/api/portfolio/careers/add', career),
-    deleteCareer: (id: number) =>
-        apiClient.delete(`/api/portfolio/careers/${id}`),
-    updateCareer: (id: string, career: any) =>
-        apiClient.put(`/api/portfolio/careers/${id}`, career),
 
-};
+    /** 학력 목록 조회 - GET /api/portfolio/educations */
+    getEducations: () =>
+        apiClient.get('/api/portfolio/educations'),
 
-// ===== Coding Test (Solved.ac) =====
-export const codingTestApi = {
-    /** 핸들 검증 - GET /api/coding-test/check */
-    checkHandle: (handle: string) =>
-        apiClient.get(`/api/coding-test/check?handle=${handle}`),
-
-    /** 코딩 테스트 정보 저장 - POST /api/coding-test */
-    saveCodingTest: (handle: string) =>
-        apiClient.post('/api/coding-test', { handle }),
-
-    /** 코딩 테스트 정보 조회 - GET /api/coding-test */
-    getCodingTest: () =>
-        apiClient.get('/api/coding-test'),
-};
-
-// ===== Analytics (Career Preferences) =====
-export const analyticsApi = {
-    /** 
-     * 커리어 선호도 조회 - GET /api/analytics/preferences 
-     * Response: { success: true, preference: { jobRole, companyType, ... } }
-     */
-    getPreferences: () =>
-        apiClient.get('/api/analytics/preferences'),
-
-    /** 
-     * 커리어 선호도 저장 - POST /api/analytics/preferences 
-     * Request: { jobRole, companyType }
-     */
-    savePreferences: (data: { jobRole: string; companyType: string }) =>
-        apiClient.post('/api/analytics/preferences', data)
+    /** 학력 저장 - POST /api/portfolio/educations */
+    saveEducations: (educations: any[]) =>
+        apiClient.post('/api/portfolio/educations', educations),
 };
