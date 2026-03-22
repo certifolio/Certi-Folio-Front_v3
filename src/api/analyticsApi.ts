@@ -4,12 +4,23 @@
  */
 import { apiClient } from './client';
 
-export const analyticsApi = {
-    /** 커리어 선호도 조회 - GET /api/analytics/preferences */
-    getPreferences: () =>
-        apiClient.get('/api/analytics/preferences'),
+export interface AnalyticsResult {
+    overallScore: number;
+    categoryScores: {
+        실무경력: number;
+        프로젝트경험: number;
+        자격증어학: number;
+        학점전공: number;
+        대외활동: number;
+        어학역량: number;
+    };
+    strengths: string[];
+    improvements: string[];
+    summary: string;
+}
 
-    /** 스킬 분석 조회 - GET /api/analytics/skill-analysis */
-    getSkillAnalysis: () =>
-        apiClient.get('/api/analytics/skill-analysis'),
+export const analyticsApi = {
+    /** 포트폴리오 AI 분석 - GET /api/analytics/portfolio */
+    analyzePortfolio: (): Promise<AnalyticsResult> =>
+        apiClient.get('/api/analytics/portfolio').then((res: any) => res.data),
 };

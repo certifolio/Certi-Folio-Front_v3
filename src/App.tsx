@@ -22,7 +22,7 @@ import { Navbar } from "./components/Layout/Navbar";
 import { useAuth } from "./contexts/AuthContext";
 import { useApp } from "./contexts/AppContext";
 import { portfolioApi } from "./api/userApi";
-import { analyticsApi } from "./api/analyticsApi";
+import { analyticsApi, type AnalyticsResult } from "./api/analyticsApi";
 
 export const App: React.FC = () => {
   const { isLoggedIn, userProfile, handleLogout } = useAuth();
@@ -45,6 +45,7 @@ export const App: React.FC = () => {
     score: 78,
     percentile: 15,
   });
+  const [analyticsResult, setAnalyticsResult] = useState<AnalyticsResult | null>(null);
 
   // 백엔드에서 대시보드 데이터 로드
   useEffect(() => {
@@ -63,12 +64,20 @@ export const App: React.FC = () => {
             })),
           );
         }
+
+        if (userProfile?.isInfoInputted) {
+          const analyticsRes = await analyticsApi.analyzePortfolio().catch(() => null);
+          if (analyticsRes) {
+            setAnalyticsResult(analyticsRes);
+            setDashboardScore({ score: analyticsRes.overallScore, percentile: Math.max(5, 100 - analyticsRes.overallScore) });
+          }
+        }
       } catch (err) {
         console.warn("데이터 로드 실패:", err);
       }
     };
     loadDashboardData();
-  }, [isLoggedIn]);
+  }, [isLoggedIn, userProfile?.isInfoInputted]);
 
   // Enhanced Skills Data
   const skills = [
@@ -405,6 +414,7 @@ export const App: React.FC = () => {
               <SpecReport
                 onGoToDashboard={() => setCurrentView("dashboard")}
                 onDiagnose={() => setCurrentView("flow-test")}
+                analyticsData={analyticsResult}
               />
             </div>
           </div>

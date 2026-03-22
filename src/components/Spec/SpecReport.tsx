@@ -2,18 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { GlassCard } from '../UI/GlassCard';
 import { Button } from '../UI/Button';
 import { useAuth } from '../../contexts/AuthContext';
+import type { AnalyticsResult } from '../../api/analyticsApi';
 
 interface SpecReportProps {
     onGoToDashboard: () => void;
     onDiagnose?: () => void;
+    analyticsData?: AnalyticsResult | null;
 }
 
-export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagnose }) => {
+export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagnose, analyticsData }) => {
     const { userProfile } = useAuth();
     const [loadingStep, setLoadingStep] = useState(0);
     const [showResult, setShowResult] = useState(false);
 
-    // If no user data is provided, show empty state immediately
     if (!userProfile?.isInfoInputted) {
         return (
             <div className="w-full h-full min-h-[600px] flex flex-col items-center justify-center animate-fade-in-up">
@@ -35,7 +36,6 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
         );
     }
 
-    // Loading Sequence Messages
     const loadingMessages = [
         "데이터 분석 중...",
         `${userProfile?.bio || '직무'} 공고 스캔...`,
@@ -48,53 +48,50 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
         if (loadingStep < loadingMessages.length) {
             const timer = setTimeout(() => {
                 setLoadingStep(prev => prev + 1);
-            }, 250); // Faster speed: 0.25s per step
+            }, 250);
             return () => clearTimeout(timer);
         } else {
             setTimeout(() => setShowResult(true), 100);
         }
     }, [loadingStep]);
 
-    // Mock Analysis Data
+    // 실제 API 데이터 or 폴백
+    const scores = analyticsData?.categoryScores;
     const stats = {
-        gpa: 80,
-        language: 45,
-        certificate: 20,
-        project: 20,
-        activity: 20,
-        career: 10
+        gpa: scores?.['학점전공'] ?? 50,
+        language: scores?.['어학역량'] ?? 50,
+        project: scores?.['프로젝트경험'] ?? 50,
+        career: scores?.['실무경력'] ?? 50,
+        activity: scores?.['대외활동'] ?? 50,
+        certificate: scores?.['자격증어학'] ?? 50,
     };
 
-    // Normalize stats to max 100
-    Object.keys(stats).forEach(key => {
-        // @ts-ignore
-        if (stats[key] > 100) stats[key] = 100;
-        // @ts-ignore
-        if (stats[key] < 20) stats[key] = 20;
-    });
+    const totalScore = analyticsData?.overallScore ?? Math.round(Object.values(stats).reduce((a, b) => a + b, 0) / 6);
+    const strengths = analyticsData?.strengths ?? [];
+    const improvements = analyticsData?.improvements ?? [];
+    const summary = analyticsData?.summary ?? '';
 
-    // Helper for Radar Chart
-    const getRadarPath = (s: any) => {
-        // 6 points: Top, TopRight, BottomRight, Bottom, BottomLeft, TopLeft
+    let grade = 'B';
+    if (totalScore >= 90) grade = 'S';
+    else if (totalScore >= 80) grade = 'A';
+    else if (totalScore >= 70) grade = 'B+';
+
+    const radius = 80;
+    const strokeWidth = 16;
+    const circumference = 2 * Math.PI * radius;
+    const strokeDashoffset = circumference * (1 - totalScore / 100);
+
+    const getRadarPath = (s: typeof stats) => {
         const scale = 0.8;
         const center = 100;
-
-        // Order: 학점, 어학, 프로젝트, 경력(Bottom), 대외활동, 자격증
-        const v = [
-            s.gpa, s.language, s.project,
-            s.career, s.activity, s.certificate
-        ];
-
-        // Angles for hexagon (starts from -90 deg aka Top)
+        const v = [s.gpa, s.language, s.project, s.career, s.activity, s.certificate];
         const angles = [-90, -30, 30, 90, 150, 210].map(a => a * (Math.PI / 180));
-
         const points = v.map((val, i) => {
             const r = val * scale;
             const x = center + r * Math.cos(angles[i]);
             const y = center + r * Math.sin(angles[i]);
             return `${x},${y}`;
         });
-
         return points.join(' ');
     };
 
@@ -118,23 +115,10 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
         );
     }
 
-    // Calculate Total Grade
-    const totalScore = Math.round(Object.values(stats).reduce((a, b) => a + b, 0) / 6);
-    let grade = 'B';
-    if (totalScore >= 90) grade = 'S';
-    else if (totalScore >= 80) grade = 'A';
-    else if (totalScore >= 70) grade = 'B+';
-
-    // Circular Chart Configuration
-    const radius = 80;
-    const strokeWidth = 16;
-    const circumference = 2 * Math.PI * radius;
-    const strokeDashoffset = circumference * (1 - totalScore / 100);
-
     return (
         <div className="w-full max-w-6xl mx-auto pb-20 animate-fade-in-up px-4">
 
-            {/* Header Section */}
+            {/* Header */}
             <div className="text-center mb-10">
                 <div className="inline-block px-4 py-1 rounded-full bg-cyan-100 text-cyan-700 text-sm font-bold mb-4 border border-cyan-200">
                     AI DIAGNOSIS COMPLETE
@@ -142,22 +126,16 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
                 <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-4">
                     <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-600 to-purple-600">{userProfile?.name || '사용자'}</span>님의 커리어 분석 리포트
                 </h1>
-                <p className="text-gray-500 text-lg">
-                    목표하신 직무 적합도를 분석했습니다.
-                </p>
+                <p className="text-gray-500 text-lg">목표하신 직무 적합도를 분석했습니다.</p>
             </div>
 
-            {/* Top Grid: Score & Radar */}
+            {/* Score & Radar */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                {/* Card 1: Total Score (Cleaned up - no decoration) */}
                 <GlassCard className="lg:col-span-1 p-8 flex flex-col items-center justify-center relative overflow-hidden group hover:border-cyan-300 transition-all">
                     <h3 className="text-gray-500 font-bold uppercase tracking-widest text-xs mb-8">Total Competency</h3>
-
                     <div className="relative w-64 h-64 flex items-center justify-center">
                         <svg className="w-full h-full transform -rotate-90" viewBox="0 0 200 200">
-                            {/* Background Circle */}
                             <circle cx="100" cy="100" r={radius} stroke="#f3f4f6" strokeWidth={strokeWidth} fill="none" />
-                            {/* Progress Circle */}
                             <circle
                                 cx="100" cy="100" r={radius}
                                 stroke="url(#scoreGradient)"
@@ -177,31 +155,26 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
                         </svg>
                         <div className="absolute inset-0 flex flex-col items-center justify-center">
                             <span className="text-7xl font-black text-gray-900 tracking-tighter">{grade}</span>
-                            <span className="text-base font-bold text-cyan-600 mt-2">상위 {100 - Math.round((totalScore / 100) * 85)}%</span>
+                            <span className="text-base font-bold text-cyan-600 mt-2">{totalScore}점</span>
                         </div>
                     </div>
-                    <p className="mt-8 text-center text-sm text-gray-600 leading-relaxed px-2">
-                        지원자 평균 대비 <span className="font-bold text-cyan-600">직무 경험</span>이 우수하며,<br />특히 프로젝트 수행 능력이 돋보입니다.
-                    </p>
+                    {summary && (
+                        <p className="mt-8 text-center text-sm text-gray-600 leading-relaxed px-2">{summary}</p>
+                    )}
                 </GlassCard>
 
-                {/* Card 2: Radar Chart & All 6 Stats */}
                 <GlassCard className="lg:col-span-2 p-8 flex flex-col md:flex-row items-center gap-8 bg-white/60">
                     <div className="flex-1 w-full max-w-[320px] aspect-square relative p-4">
                         <svg viewBox="0 0 200 200" className="w-full h-full overflow-visible">
-                            {/* Grid Lines (Hexagons) */}
                             {[20, 40, 60, 80].map(r => (
                                 <polygon key={r} points={getRadarPath({ gpa: r / 0.8, language: r / 0.8, project: r / 0.8, career: r / 0.8, activity: r / 0.8, certificate: r / 0.8 })} fill="none" stroke="#e5e7eb" strokeWidth="1" />
                             ))}
-                            {/* Axis Lines */}
                             <line x1="100" y1="100" x2="100" y2="20" stroke="#e5e7eb" strokeWidth="1" />
                             <line x1="100" y1="100" x2="169" y2="60" stroke="#e5e7eb" strokeWidth="1" />
                             <line x1="100" y1="100" x2="169" y2="140" stroke="#e5e7eb" strokeWidth="1" />
                             <line x1="100" y1="100" x2="100" y2="180" stroke="#e5e7eb" strokeWidth="1" />
                             <line x1="100" y1="100" x2="31" y2="140" stroke="#e5e7eb" strokeWidth="1" />
                             <line x1="100" y1="100" x2="31" y2="60" stroke="#e5e7eb" strokeWidth="1" />
-
-                            {/* Data Area */}
                             <polygon
                                 points={getRadarPath(stats)}
                                 fill="rgba(6, 182, 212, 0.2)"
@@ -209,7 +182,6 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
                                 strokeWidth="2"
                                 className="animate-pulse"
                             />
-                            {/* Labels */}
                             <text x="100" y="10" textAnchor="middle" className="text-[11px] fill-gray-500 font-bold">학점/전공</text>
                             <text x="190" y="55" textAnchor="middle" className="text-[11px] fill-gray-500 font-bold">어학</text>
                             <text x="190" y="150" textAnchor="middle" className="text-[11px] fill-gray-500 font-bold">프로젝트</text>
@@ -228,7 +200,7 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
                             {[
                                 { label: '실무 경력', score: stats.career, color: 'bg-cyan-500' },
                                 { label: '프로젝트 경험', score: stats.project, color: 'bg-indigo-500' },
-                                { label: '자격증/어학', score: (stats.certificate + stats.language) / 2, color: 'bg-purple-500' },
+                                { label: '자격증/어학', score: stats.certificate, color: 'bg-purple-500' },
                                 { label: '학점/전공', score: stats.gpa, color: 'bg-blue-500' },
                                 { label: '대외활동', score: stats.activity, color: 'bg-green-500' },
                                 { label: '어학 역량', score: stats.language, color: 'bg-orange-400' },
@@ -263,37 +235,35 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Strengths */}
                         <div className="bg-blue-50/50 rounded-2xl p-6 border border-blue-100">
                             <h4 className="font-bold text-blue-800 mb-4 flex items-center gap-2">
                                 <span className="bg-blue-100 p-1 rounded-md text-xs">👍 강점 (Strength)</span>
                             </h4>
                             <ul className="space-y-3">
-                                <li className="flex gap-2 text-sm text-gray-700 leading-relaxed">
-                                    <span className="text-blue-500 font-bold">✓</span>
-                                    <span>지원 직무와 관련된 프로젝트 경험이 풍부하여 실무 적응력이 높게 평가됩니다.</span>
-                                </li>
-                                <li className="flex gap-2 text-sm text-gray-700 leading-relaxed">
-                                    <span className="text-blue-500 font-bold">✓</span>
-                                    <span>보유 자격증으로 기초 역량이 탄탄합니다.</span>
-                                </li>
+                                {strengths.length > 0 ? strengths.map((s, i) => (
+                                    <li key={i} className="flex gap-2 text-sm text-gray-700 leading-relaxed">
+                                        <span className="text-blue-500 font-bold flex-shrink-0">✓</span>
+                                        <span>{s}</span>
+                                    </li>
+                                )) : (
+                                    <li className="text-sm text-gray-400">분석 데이터가 없습니다.</li>
+                                )}
                             </ul>
                         </div>
 
-                        {/* Weaknesses / Improvements */}
                         <div className="bg-orange-50/50 rounded-2xl p-6 border border-orange-100">
                             <h4 className="font-bold text-orange-800 mb-4 flex items-center gap-2">
                                 <span className="bg-orange-100 p-1 rounded-md text-xs">⚡ 보완점 (Improvement)</span>
                             </h4>
                             <ul className="space-y-3">
-                                <li className="flex gap-2 text-sm text-gray-700 leading-relaxed">
-                                    <span className="text-orange-500 font-bold">!</span>
-                                    <span>실무 경력 점수가 상대적으로 낮습니다. 단기 인턴십이나 현장 실습 기회를 찾아보는 것을 추천합니다.</span>
-                                </li>
-                                <li className="flex gap-2 text-sm text-gray-700 leading-relaxed">
-                                    <span className="text-orange-500 font-bold">!</span>
-                                    <span>알고리즘 역량(코딩 테스트) 증빙 자료가 부족합니다. Solved.ac 연동이나 깃허브 커밋 로그 관리가 필요합니다.</span>
-                                </li>
+                                {improvements.length > 0 ? improvements.map((imp, i) => (
+                                    <li key={i} className="flex gap-2 text-sm text-gray-700 leading-relaxed">
+                                        <span className="text-orange-500 font-bold flex-shrink-0">!</span>
+                                        <span>{imp}</span>
+                                    </li>
+                                )) : (
+                                    <li className="text-sm text-gray-400">분석 데이터가 없습니다.</li>
+                                )}
                             </ul>
                         </div>
                     </div>

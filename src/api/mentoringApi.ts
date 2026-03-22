@@ -68,3 +68,19 @@ export const mentoringApplicationApi = {
     rejectApplication: (id: number, reason?: string) =>
         apiClient.post(`/api/mentoring-applications/${id}/reject`, reason ? { reason } : undefined),
 };
+
+// ===== Admin =====
+
+export const adminMentorApi = {
+    /** [어드민] 전체 멘토 신청 목록 조회 - GET /api/mentors/admin/applications */
+    getApplications: () =>
+        apiClient.get('/api/mentors/admin/applications'),
+
+    /** [어드민] 멘토 승인 - POST /api/mentors/admin/:id/approve */
+    approve: (id: number) =>
+        apiClient.post(`/api/mentors/admin/${id}/approve`),
+
+    /** [어드민] 멘토 거절 - POST /api/mentors/admin/:id/reject */
+    reject: (id: number) =>
+        apiClient.post(`/api/mentors/admin/${id}/reject`),
+};
