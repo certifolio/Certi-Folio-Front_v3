@@ -58,22 +58,15 @@ export const App: React.FC = () => {
     if (!isLoggedIn) return;
     const loadDashboardData = async () => {
       try {
-        const [certsRes, dashRes] = await Promise.allSettled([
-          portfolioApi.getCertificates(),
-          dashboardApi.getDashboard(),
-        ]);
-        if (certsRes.status === 'fulfilled' && Array.isArray(certsRes.value) && certsRes.value.length > 0) {
-          setCertificates(certsRes.value.map((c: any) => ({
+        const certsRes = await portfolioApi.getCertificates().catch(() => null);
+        if (certsRes && Array.isArray(certsRes) && certsRes.length > 0) {
+          setCertificates(certsRes.map((c: any) => ({
             name: c.name || c.certificateName || '',
             date: c.acquiredDate || c.date || '',
             expiry: c.expiryDate || c.expiry || '영구',
             type: c.type || 'cert',
             score: c.score || c.grade || '합격',
           })));
-        }
-        if (dashRes.status === 'fulfilled' && dashRes.value) {
-          const d = dashRes.value;
-          if (d.score !== undefined) setDashboardScore({ score: d.score, percentile: d.percentile || 15 });
         }
 
         if (userProfile?.isInfoInputted) {
