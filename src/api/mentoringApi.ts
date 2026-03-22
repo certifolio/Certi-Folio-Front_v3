@@ -69,27 +69,18 @@ export const mentoringApplicationApi = {
         apiClient.post(`/api/mentoring-applications/${id}/reject`, reason ? { reason } : undefined),
 };
 
-// ===== Chat =====
+// ===== Admin =====
 
-export const chatApi = {
-    /** 채팅방 생성 또는 기존 채팅방 조회 - POST /api/chat/rooms */
-    getOrCreateRoom: (mentorId: number) =>
-        apiClient.post('/api/chat/rooms', { mentorId }),
+export const adminMentorApi = {
+    /** [어드민] 전체 멘토 신청 목록 조회 - GET /api/mentors/admin/applications */
+    getApplications: () =>
+        apiClient.get('/api/mentors/admin/applications'),
 
-    /** 내 채팅방 목록 조회 - GET /api/chat/rooms */
-    getMyChatRooms: () =>
-        apiClient.get('/api/chat/rooms'),
+    /** [어드민] 멘토 승인 - POST /api/mentors/admin/:id/approve */
+    approve: (id: number) =>
+        apiClient.post(`/api/mentors/admin/${id}/approve`),
 
-    /** 채팅 기록 조회 - GET /api/chat/rooms/:id/messages */
-    getChatHistory: (chatRoomId: number) =>
-        apiClient.get(`/api/chat/rooms/${chatRoomId}/messages`),
-
-    /** 최근 메시지 조회 - GET /api/chat/rooms/:id/messages/recent */
-    getRecentMessages: (chatRoomId: number) =>
-        apiClient.get(`/api/chat/rooms/${chatRoomId}/messages/recent`),
-
-    /** 메시지 전송 (REST) - POST /api/chat/rooms/:id/send */
-    sendMessage: (chatRoomId: number, content: string) =>
-        apiClient.post(`/api/chat/rooms/${chatRoomId}/send`, { content }),
+    /** [어드민] 멘토 거절 - POST /api/mentors/admin/:id/reject */
+    reject: (id: number) =>
+        apiClient.post(`/api/mentors/admin/${id}/reject`),
 };
-

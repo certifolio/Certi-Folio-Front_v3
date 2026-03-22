@@ -19,10 +19,10 @@ import { AdminControlModal } from './components/Admin/AdminControlModal';
 import { Navbar } from './components/Layout/Navbar';
 
 // Contexts
-import { useAuth } from './contexts/AuthContext';
-import { useApp } from './contexts/AppContext';
-import { portfolioApi } from './api/userApi';
-import { dashboardApi } from './api/analyticsApi';
+import { useAuth } from "./contexts/AuthContext";
+import { useApp } from "./contexts/AppContext";
+import { portfolioApi } from "./api/userApi";
+import { analyticsApi, type AnalyticsResult } from "./api/analyticsApi";
 
 export const App: React.FC = () => {
   const {
@@ -38,8 +38,20 @@ export const App: React.FC = () => {
 
   const [line1Done, setLine1Done] = useState(false);
 
-  const [certificates, setCertificates] = useState<{ name: string, date: string, expiry: string, type: string, score: string }[]>([]);
-  const [dashboardScore, setDashboardScore] = useState({ score: 78, percentile: 15 });
+  const [certificates, setCertificates] = useState<
+    {
+      name: string;
+      date: string;
+      expiry: string;
+      type: string;
+      score: string;
+    }[]
+  >([]);
+  const [dashboardScore, setDashboardScore] = useState({
+    score: 78,
+    percentile: 15,
+  });
+  const [analyticsResult, setAnalyticsResult] = useState<AnalyticsResult | null>(null);
 
   // 백엔드에서 대시보드 데이터 로드
   useEffect(() => {
@@ -63,12 +75,20 @@ export const App: React.FC = () => {
           const d = dashRes.value;
           if (d.score !== undefined) setDashboardScore({ score: d.score, percentile: d.percentile || 15 });
         }
+
+        if (userProfile?.isInfoInputted) {
+          const analyticsRes = await analyticsApi.analyzePortfolio().catch(() => null);
+          if (analyticsRes) {
+            setAnalyticsResult(analyticsRes);
+            setDashboardScore({ score: analyticsRes.overallScore, percentile: Math.max(5, 100 - analyticsRes.overallScore) });
+          }
+        }
       } catch (err) {
         console.warn('대시보드 데이터 로드 실패:', err);
       }
     };
     loadDashboardData();
-  }, [isLoggedIn]);
+  }, [isLoggedIn, userProfile?.isInfoInputted]);
 
   // Enhanced Skills Data
   const skills = [
@@ -321,8 +341,9 @@ export const App: React.FC = () => {
             {!isLoggedIn && <FullPageLockOverlay onLogin={() => setCurrentView('login')} />}
             <div className={`pt-36 pb-12 transition-all duration-500 ${!isLoggedIn ? 'blur-md opacity-40 select-none pointer-events-none' : ''}`}>
               <SpecReport
-                onGoToDashboard={() => setCurrentView('dashboard')}
-                onDiagnose={() => setCurrentView('flow-test')}
+                onGoToDashboard={() => setCurrentView("dashboard")}
+                onDiagnose={() => setCurrentView("flow-test")}
+                analyticsData={analyticsResult}
               />
             </div>
           </div>

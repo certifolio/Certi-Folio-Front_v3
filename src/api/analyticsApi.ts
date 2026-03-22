@@ -4,38 +4,23 @@
  */
 import { apiClient } from './client';
 
-// ===== Dashboard =====
-
-export const dashboardApi = {
-    /** 대시보드 데이터 조회 - GET /api/dashboard */
-    getDashboard: () =>
-        apiClient.get('/api/dashboard'),
-
-    /** 대시보드 새로고침 - POST /api/dashboard/refresh */
-    refreshDashboard: () =>
-        apiClient.post('/api/dashboard/refresh'),
-};
-
-// ===== Analytics =====
+export interface AnalyticsResult {
+    overallScore: number;
+    categoryScores: {
+        실무경력: number;
+        프로젝트경험: number;
+        자격증어학: number;
+        학점전공: number;
+        대외활동: number;
+        어학역량: number;
+    };
+    strengths: string[];
+    improvements: string[];
+    summary: string;
+}
 
 export const analyticsApi = {
-    /** 커리어 선호도 조회 - GET /api/analytics/preferences */
-    getPreferences: () =>
-        apiClient.get('/api/analytics/preferences'),
-
-    /** 커리어 선호도 저장 - POST /api/analytics/preferences */
-    savePreferences: (data: {
-        targetJobRole?: string;
-        targetCompanyType?: string;
-        preferredLocation?: string;
-        salaryRange?: string;
-    }) => apiClient.post('/api/analytics/preferences', data),
-
-    /** 스킬 분석 조회 - GET /api/analytics/skill-analysis */
-    getSkillAnalysis: () =>
-        apiClient.get('/api/analytics/skill-analysis'),
-
-    /** 스킬 분석 새로고침 - POST /api/analytics/skill-analysis/refresh */
-    refreshSkillAnalysis: () =>
-        apiClient.post('/api/analytics/skill-analysis/refresh'),
+    /** 포트폴리오 AI 분석 - GET /api/analytics/portfolio */
+    analyzePortfolio: (): Promise<AnalyticsResult> =>
+        apiClient.get('/api/analytics/portfolio').then((res: any) => res.data),
 };
