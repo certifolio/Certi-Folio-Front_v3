@@ -50,39 +50,11 @@ export const InfoManagement: React.FC = () => {
   useEffect(() => {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (saved) {
-      setUserData(JSON.parse(saved));
-    } else {
-      // Initialize with Dummy Data if empty
-      setUserData({
-        name: userProfile?.name || '사용자',
-        birthYear: '1999',
-        academicStatus: 'graduated',
-        schoolName: '한국대학교',
-        major: '소프트웨어학과',
-        degree: 'bachelor',
-        startDate: '2018.03',
-        endDate: '2024.02',
-        gpa: '4.1',
-        maxGpa: '4.5',
-        projects: [
-          { projectName: 'Certi-Folio Platform', role: 'Frontend Lead', techStack: ['React', 'TypeScript', 'Tailwind'], description: 'AI 기반 커리어 멘토링 매칭 플랫폼 개발', isTeam: 'team', startDate: '2023.01', endDate: '2023.06', links: { github: '', demo: '' }, outcome: '캡스톤 디자인 대상 수상' },
-          { projectName: 'Algorithmic Trading Bot', role: 'Backend Developer', techStack: ['Python', 'AWS', 'Docker'], description: '실시간 주식 데이터 분석 및 자동 매매 봇 구축', isTeam: 'individual', startDate: '2022.09', endDate: '2022.12', links: { github: '', demo: '' }, outcome: '수익률 15% 달성' }
-        ],
-        activities: [
-          { id: '1', activityName: '멋쟁이사자처럼 10기', activityType: 'club', role: '운영진', description: '웹 개발 교육 동아리 운영 및 해커톤 주최', startDate: '2022.03', endDate: '2022.12', achievement: '' },
-          { id: '2', activityName: '삼성전자 대학생 봉사단', activityType: 'volunteer', role: '멘토', description: '지역 사회 청소년 대상 코딩 교육 봉사', startDate: '2021.03', endDate: '2021.12', achievement: '우수 멘토상 수상' }
-        ],
-        certificates: [
-          { id: '1', type: 'general', name: '정보처리기사', date: '2023.08.15', score: '합격' },
-          { id: '2', type: 'language', name: 'TOEIC', date: '2023.05.20', score: '920' },
-          { id: '3', type: 'general', name: 'SQLD', date: '2022.11.10', score: '우수' }
-        ],
-        careers: [
-          { id: '1', type: 'intern', companyName: '네이버', department: 'FE플랫폼', position: '채용연계형 인턴', startDate: '2023.07', endDate: '2023.12', description: '사내 공통 컴포넌트 라이브러리 개발' },
-          { id: '2', type: 'intern', companyName: '당근마켓', department: '지역생활', position: 'Summer Intern', startDate: '2022.06', endDate: '2022.08', description: '동네 생활 탭 UI 개선 및 QA' }
-        ],
-        solvedAcId: 'neon_master'
-      });
+      try {
+        setUserData(JSON.parse(saved));
+      } catch {
+        // 파싱 실패 시 초기값 유지
+      }
     }
   }, []);
 
@@ -96,13 +68,17 @@ export const InfoManagement: React.FC = () => {
   const handleManualSave = async () => {
     saveToStorage(userData);
 
-    // Sync Name to Backend
+    // Sync to Backend
     if (userData.name) {
       try {
-        await userApi.updateBasicInfo({ name: userData.name });
-        // await refreshProfile(); // Optional: updates global state
+        await userApi.saveOnboarding({
+          name: userData.name,
+          birthYear: parseInt(userData.birthYear) || 2000,
+          companyType: '',
+          jobRole: '',
+        });
       } catch (e) {
-        console.error("Failed to sync name", e);
+        console.error("Failed to sync user info", e);
       }
     }
 
@@ -252,7 +228,7 @@ export const InfoManagement: React.FC = () => {
                     </div>
 
                     <div className="flex flex-wrap gap-1.5 mb-4">
-                      {proj.techStack?.map((stack, i) => (
+                      {(Array.isArray(proj.techStack) ? proj.techStack : (proj.techStack ? String(proj.techStack).split(',').map(s => s.trim()) : [])).map((stack, i) => (
                         <span key={i} className="text-xs px-2 py-1 rounded-md bg-cyan-50 text-cyan-700 font-medium border border-cyan-100">{stack}</span>
                       ))}
                     </div>

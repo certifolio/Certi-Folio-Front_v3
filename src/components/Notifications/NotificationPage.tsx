@@ -44,21 +44,20 @@ export const NotificationPage: React.FC = () => {
             const params: { type?: string } = {};
             if (filter !== 'all') params.type = filter;
             const res = await notificationApi.getNotifications(params);
-            // 백엔드 응답 형태에 맞춰 매핑
-            const items = res.notifications || res.content || res;
+            // 백엔드 NotificationScrollResponseDTO: { notifications: [...], hasNext, nextCursorId }
+            const items = res?.notifications || res;
             if (Array.isArray(items)) {
                 setNotifications(items.map((n: any) => ({
                     id: n.id,
                     type: n.type || 'system',
                     title: n.title,
-                    message: n.message || n.content || '',
-                    createdAt: n.createdAt || n.time || '',
-                    read: n.read ?? n.isRead ?? false,
+                    message: n.message || '',
+                    createdAt: n.timestamp || n.createdAt || '',
+                    read: n.isRead ?? n.read ?? false,
                 })));
             }
         } catch (err) {
             console.warn('알림 API 호출 실패:', err);
-            // API 실패 시 mock 유지
         } finally {
             setLoading(false);
         }
@@ -105,8 +104,15 @@ export const NotificationPage: React.FC = () => {
     };
 
     // 전체 삭제
-    const handleClearAll = () => {
+    const handleClearAll = async () => {
         if (window.confirm('모든 알림을 삭제하시겠습니까?')) {
+            if (isLoggedIn && token) {
+                try {
+                    await notificationApi.deleteAllNotifications();
+                } catch (err) {
+                    console.warn('전체 삭제 API 실패:', err);
+                }
+            }
             setNotifications([]);
         }
     };

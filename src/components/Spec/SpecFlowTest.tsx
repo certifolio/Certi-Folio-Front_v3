@@ -85,13 +85,10 @@ export const SpecFlowTest: React.FC = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyticsResult, setAnalyticsResult] = useState<AnalyticsResult | null>(null);
 
-  // Check if user has already input info
-  useEffect(() => {
-    if (userProfile?.isInfoInputted && stage === 'intro') {
-      // If info inputted, show report (finished)
-      setStage('finished');
-    }
-  }, [userProfile, stage]);
+  // 추후 isInfoInputted 대신 다른 로직으로 교체 예정
+  // useEffect(() => {
+  //   if (stage === 'intro') setStage('finished');
+  // }, [stage]);
 
   // Initialize Data
   const [userData, setUserData] = useState<FullUserData>(() => {
@@ -170,10 +167,17 @@ export const SpecFlowTest: React.FC = () => {
     if (!isLoggedIn || !token) return;
     try {
       await Promise.allSettled([
-        // 자격증: date→issueDate, certId→certificateNumber (CertificateDTO @JsonAlias로 처리됨)
-        data.certificates.length > 0 ? portfolioApi.saveCertificates(data.certificates) : Promise.resolve(),
+        // 자격증 → CertificateRequestDTO: name, type, issuer, issueDate, score, certificateNumber
+        data.certificates.length > 0 ? portfolioApi.saveCertificates(data.certificates.map(c => ({
+          name: (c as any).name || (c as any).certificateName || '',
+          type: (c as any).type || 'cert',
+          issuer: (c as any).issuer || '',
+          issueDate: (c as any).date || (c as any).issueDate || '',
+          score: (c as any).score || '',
+          certificateNumber: (c as any).certId || (c as any).certificateNumber || '',
+        }))) : Promise.resolve(),
 
-        // 프로젝트: projectName→name, isTeam→type, links→githubLink/demoLink, techStack[]→String, outcome→result
+        // 프로젝트 → ProjectRequestDTO: name, type, role, techStack, description, githubLink, demoLink, result, startDate, endDate
         data.projects.length > 0 ? portfolioApi.saveProjects(data.projects.map(p => ({
           name: p.projectName,
           type: p.isTeam,
@@ -187,18 +191,18 @@ export const SpecFlowTest: React.FC = () => {
           endDate: p.endDate,
         }))) : Promise.resolve(),
 
-        // 대외활동: activityName→name, activityType→type, achievement→result
+        // 대외활동 → ActivityRequestDTO: name, type, role, startMonth, endMonth, description, result
         data.activities.length > 0 ? portfolioApi.saveActivities(data.activities.map(a => ({
           name: a.activityName,
           type: a.activityType,
           role: a.role,
-          startDate: a.startDate,
-          endDate: a.endDate,
+          startMonth: a.startDate,
+          endMonth: a.endDate,
           description: a.description,
           result: a.achievement,
         }))) : Promise.resolve(),
 
-        // 경력: companyName→company, department를 position으로 병합
+        // 경력 → CareerRequestDTO: type, company, position, startDate, endDate, description
         data.careers.length > 0 ? portfolioApi.saveCareers(data.careers.map(c => ({
           type: c.type,
           company: c.companyName,
@@ -208,7 +212,7 @@ export const SpecFlowTest: React.FC = () => {
           description: c.description,
         }))) : Promise.resolve(),
 
-        // 학력: academicStatus→status, gpa/maxGpa String→Number
+        // 학력 → EducationRequestDTO: schoolName, major, degree, status, startDate, endDate, gpa, maxGpa
         data.schoolName ? portfolioApi.saveEducations([{
           schoolName: data.schoolName,
           major: data.major,
@@ -280,27 +284,31 @@ export const SpecFlowTest: React.FC = () => {
   const handleBasicInfoComplete = async (data: any) => {
     setUserData(prev => ({ ...prev, ...data }));
 
-    // 이름만 저장, isInfoInputted는 마지막 단계에서만 true로 설정
+    // 온보딩 정보 저장
     if (isLoggedIn && data.name) {
       try {
-        await userApi.updateBasicInfo({ name: data.name, isInfoInputted: false });
+        await userApi.saveOnboarding({
+          name: data.name,
+          birthYear: parseInt(data.birthYear) || 2000,
+          companyType: data.targetCompanyType || '',
+          jobRole: data.targetJobRole || '',
+        });
       } catch (e) {
-        console.error("Failed to update basic info", e);
+        console.error("Failed to save onboarding", e);
       }
     }
 
     setStage('prompt_edu');
   };
 
-  // 모든 데이터 저장 완료 후 isInfoInputted = true 설정
+  // 모든 데이터 저장 완료
   const completeInfoInput = async (data: FullUserData) => {
     await syncToBackend(data);
     if (isLoggedIn) {
       try {
-        await userApi.updateBasicInfo({ name: data.name, isInfoInputted: true });
         await refreshProfile();
       } catch (e) {
-        console.error("Failed to complete info input", e);
+        console.error("Failed to refresh profile", e);
       }
     }
   };

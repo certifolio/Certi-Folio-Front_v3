@@ -1,109 +1,105 @@
 /**
- * User & Portfolio API
- * 백엔드 엔드포인트: /api/user, /api/portfolio
+ * User & Spec(Portfolio) API
+ * 백엔드 엔드포인트: /api/users, /api/specs/*
  */
 import { apiClient } from './client';
 
 // ===== User =====
 
 export const userApi = {
-    /** 내 프로필 조회 - GET /api/user/me */
+    /** 내 정보 조회 - GET /api/users/me */
     getMyProfile: () =>
-        apiClient.get('/api/user/me'),
+        apiClient.get('/api/users/me'),
 
-    /** 닉네임 설정 - PUT /api/user/nickname */
-    setNickname: (nickname: string) =>
-        apiClient.put('/api/user/nickname', { nickname }),
+    /** 온보딩 정보 저장 - POST /api/users/me/onboarding */
+    saveOnboarding: (data: {
+        name: string;
+        birthYear: number;
+        companyType: string;
+        jobRole: string;
+    }) => apiClient.post('/api/users/me/onboarding', data),
 
-    /** 닉네임 중복 확인 - GET /api/user/nickname/check */
-    checkNickname: (nickname: string) =>
-        apiClient.get(`/api/user/nickname/check?nickname=${encodeURIComponent(nickname)}`),
-
-    /** 프로필 수정 - PATCH /api/user/profile */
-    updateProfile: (data: {
-        nickname?: string;
-        phone?: string;
-        location?: string;
-        university?: string;
-        major?: string;
-        year?: string;
-        company?: string;
-        bio?: string;
-    }) => apiClient.patch('/api/user/profile', data),
-
-    /** 프로필 이미지 업로드 - POST /api/user/profile-image */
-    uploadProfileImage: (file: File) => {
-        const formData = new FormData();
-        formData.append('image', file);
-        // 이미지 업로드는 Content-Type을 직접 설정하지 않음 (FormData가 자동 처리)
-        const token = localStorage.getItem('access_token');
-        const headers: HeadersInit = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-
-        return fetch(`${import.meta.env.VITE_API_URL || 'http://ec2-3-35-37-53.ap-northeast-2.compute.amazonaws.com'}/api/user/profile-image`, {
-            method: 'POST',
-            headers,
-            body: formData,
-        }).then(res => res.json());
-    },
-
-    /** 기본 정보 업데이트 (이름, 정보 입력 완료 여부) - PATCH /api/user/basic-info */
-    updateBasicInfo: (data: { name: string; isInfoInputted?: boolean }) =>
-        apiClient.patch('/api/user/basic-info', data),
+    /** 내 정보 수정 - PATCH /api/users/me */
+    updateMyInfo: (data: {
+        name: string;
+        birthYear: number;
+        companyType: string;
+        jobRole: string;
+    }) => apiClient.patch('/api/users/me', data),
 };
 
-// ===== Portfolio =====
+// ===== Spec (Portfolio) =====
 
 export const portfolioApi = {
-    /** 자격증 목록 조회 - GET /api/portfolio/certificates */
+    /** 스펙 전체 일괄 조회 - GET /api/specs/all */
+    getAllSpecs: () =>
+        apiClient.get('/api/specs/all'),
+
+    // ----- 자격증 -----
     getCertificates: () =>
-        apiClient.get('/api/portfolio/certificates'),
-
-    /** 자격증 저장 (전체 교체) - POST /api/portfolio/certificates */
+        apiClient.get('/api/specs/certificates'),
     saveCertificates: (certificates: any[]) =>
-        apiClient.post('/api/portfolio/certificates', certificates),
-
-    /** 자격증 단건 추가 - POST /api/portfolio/certificates/add */
+        apiClient.post('/api/specs/certificates', certificates),
     addCertificate: (certificate: any) =>
-        apiClient.post('/api/portfolio/certificates/add', certificate),
-
-    /** 자격증 삭제 - DELETE /api/portfolio/certificates/:id */
+        apiClient.post('/api/specs/certificates/add', certificate),
+    modifyCertificate: (id: number, data: any) =>
+        apiClient.patch(`/api/specs/certificates/${id}`, data),
     deleteCertificate: (id: number) =>
-        apiClient.delete(`/api/portfolio/certificates/${id}`),
+        apiClient.delete(`/api/specs/certificates/${id}`),
 
-    /** 프로젝트 목록 조회 - GET /api/portfolio/projects */
+    // ----- 프로젝트 -----
     getProjects: () =>
-        apiClient.get('/api/portfolio/projects'),
-
-    /** 프로젝트 저장 - POST /api/portfolio/projects */
+        apiClient.get('/api/specs/projects'),
     saveProjects: (projects: any[]) =>
-        apiClient.post('/api/portfolio/projects', projects),
-
-    /** 프로젝트 삭제 - DELETE /api/portfolio/projects/:id */
+        apiClient.post('/api/specs/projects', projects),
+    addProject: (project: any) =>
+        apiClient.post('/api/specs/projects/add', project),
+    modifyProject: (id: number, data: any) =>
+        apiClient.patch(`/api/specs/projects/${id}`, data),
     deleteProject: (id: number) =>
-        apiClient.delete(`/api/portfolio/projects/${id}`),
+        apiClient.delete(`/api/specs/projects/${id}`),
 
-    /** 활동 목록 조회 - GET /api/portfolio/activities */
+    // ----- 활동 -----
     getActivities: () =>
-        apiClient.get('/api/portfolio/activities'),
-
-    /** 활동 저장 - POST /api/portfolio/activities */
+        apiClient.get('/api/specs/activities'),
     saveActivities: (activities: any[]) =>
-        apiClient.post('/api/portfolio/activities', activities),
+        apiClient.post('/api/specs/activities', activities),
+    addActivity: (activity: any) =>
+        apiClient.post('/api/specs/activities/add', activity),
+    modifyActivity: (id: number, data: any) =>
+        apiClient.patch(`/api/specs/activities/${id}`, data),
+    deleteActivity: (id: number) =>
+        apiClient.delete(`/api/specs/activities/${id}`),
 
-    /** 경력 목록 조회 - GET /api/portfolio/careers */
+    // ----- 경력 -----
     getCareers: () =>
-        apiClient.get('/api/portfolio/careers'),
-
-    /** 경력 저장 - POST /api/portfolio/careers */
+        apiClient.get('/api/specs/careers'),
     saveCareers: (careers: any[]) =>
-        apiClient.post('/api/portfolio/careers', careers),
+        apiClient.post('/api/specs/careers', careers),
+    addCareer: (career: any) =>
+        apiClient.post('/api/specs/careers/add', career),
+    modifyCareer: (id: number, data: any) =>
+        apiClient.patch(`/api/specs/careers/${id}`, data),
+    deleteCareer: (id: number) =>
+        apiClient.delete(`/api/specs/careers/${id}`),
 
-    /** 학력 목록 조회 - GET /api/portfolio/educations */
+    // ----- 학력 -----
     getEducations: () =>
-        apiClient.get('/api/portfolio/educations'),
-
-    /** 학력 저장 - POST /api/portfolio/educations */
+        apiClient.get('/api/specs/educations'),
     saveEducations: (educations: any[]) =>
-        apiClient.post('/api/portfolio/educations', educations),
+        apiClient.post('/api/specs/educations', educations),
+    addEducation: (education: any) =>
+        apiClient.post('/api/specs/educations/add', education),
+    modifyEducation: (id: number, data: any) =>
+        apiClient.patch(`/api/specs/educations/${id}`, data),
+    deleteEducation: (id: number) =>
+        apiClient.delete(`/api/specs/educations/${id}`),
+
+    // ----- 알고리즘 -----
+    getAlgorithm: () =>
+        apiClient.get('/api/specs/algorithm'),
+    saveAlgorithm: (data: { bojHandle: string }) =>
+        apiClient.post('/api/specs/algorithm', data),
+    syncAlgorithm: () =>
+        apiClient.patch('/api/specs/algorithm/sync'),
 };
