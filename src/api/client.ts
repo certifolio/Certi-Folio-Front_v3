@@ -35,22 +35,29 @@ class ApiError extends Error {
     }
 }
 
-// 응답 처리
+// 응답 처리 - 백엔드 ApiResponse 래퍼 자동 언래핑
+// 백엔드 응답 구조: { success, code, message, result, error, timestamp }
 const handleResponse = async (response: Response) => {
-    if (!response.ok) {
-        let data;
-        try {
-            data = await response.json();
-        } catch {
-            data = null;
-        }
+    let data;
+    try {
+        data = await response.json();
+    } catch {
+        data = null;
+    }
+
+    if (!response.ok || (data && data.success === false)) {
         throw new ApiError(
             data?.message || `API Error: ${response.status}`,
             response.status,
-            data
+            data?.error || data
         );
     }
-    return response.json();
+
+    // ApiResponse 래퍼에서 result 자동 추출
+    if (data && typeof data === 'object' && 'result' in data) {
+        return data.result;
+    }
+    return data;
 };
 
 // HTTP 메서드별 래퍼

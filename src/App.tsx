@@ -11,6 +11,9 @@ import { SpecReport } from './components/Spec/SpecReport';
 import { JobDashboard } from './components/Jobs/JobDashboard';
 import { NotificationPage } from './components/Notifications/NotificationPage';
 import { AdminDashboard } from './components/Admin/AdminDashboard';
+import { CommunityPage } from './components/Community/CommunityPage';
+import { CreatePostPage } from './components/Community/CreatePostPage';
+import { PostDetail } from './components/Community/PostDetail';
 
 // Extracted components
 import { TypingEffect } from './components/UI/TypingEffect';
@@ -37,6 +40,7 @@ export const App: React.FC = () => {
   } = useApp();
 
   const [line1Done, setLine1Done] = useState(false);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
 
   const [certificates, setCertificates] = useState<
     {
@@ -48,8 +52,8 @@ export const App: React.FC = () => {
     }[]
   >([]);
   const [dashboardScore, setDashboardScore] = useState({
-    score: 78,
-    percentile: 15,
+    score: 0,
+    percentile: 0,
   });
   const [analyticsResult, setAnalyticsResult] = useState<AnalyticsResult | null>(null);
 
@@ -61,39 +65,28 @@ export const App: React.FC = () => {
         const certsRes = await portfolioApi.getCertificates().catch(() => null);
         if (certsRes && Array.isArray(certsRes) && certsRes.length > 0) {
           setCertificates(certsRes.map((c: any) => ({
-            name: c.name || c.certificateName || '',
-            date: c.acquiredDate || c.date || '',
-            expiry: c.expiryDate || c.expiry || '영구',
+            name: c.name || '',
+            date: c.issueDate || '',
+            expiry: '영구',
             type: c.type || 'cert',
-            score: c.score || c.grade || '합격',
+            score: c.score || '합격',
           })));
         }
 
-        if (userProfile?.isInfoInputted) {
-          const analyticsRes = await analyticsApi.analyzePortfolio().catch(() => null);
-          if (analyticsRes) {
-            setAnalyticsResult(analyticsRes);
-            setDashboardScore({ score: analyticsRes.overallScore, percentile: Math.max(5, 100 - analyticsRes.overallScore) });
-          }
+        const analyticsRes = await analyticsApi.getLatest().catch(() => null);
+        if (analyticsRes) {
+          setAnalyticsResult(analyticsRes);
+          setDashboardScore({ score: analyticsRes.overallScore, percentile: Math.max(5, 100 - analyticsRes.overallScore) });
         }
       } catch (err) {
         console.warn('대시보드 데이터 로드 실패:', err);
       }
     };
     loadDashboardData();
-  }, [isLoggedIn, userProfile?.isInfoInputted]);
+  }, [isLoggedIn]);
 
-  // Enhanced Skills Data
-  const skills = [
-    { name: 'React', icon: '⚛️' },
-    { name: 'TypeScript', icon: '📘' },
-    { name: 'Node.js', icon: '🟢' },
-    { name: 'Figma', icon: '🎨' },
-    { name: 'Next.js', icon: '▲' },
-    { name: 'TailwindCSS', icon: '🌬️' },
-    { name: 'Git', icon: '🐱' },
-    { name: 'Vercel', icon: '▲' },
-  ];
+  // 스킬 데이터 — 추후 백엔드 연동 시 API에서 로드
+  const skills: { name: string; icon: string }[] = [];
 
 
 
@@ -184,7 +177,7 @@ export const App: React.FC = () => {
 
               <section className="w-full text-center mb-12">
                 <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
-                  반가워요, <span className="text-cyan-600">{isLoggedIn ? (userProfile?.name || userProfile?.nickname || '사용자') : '게스트'}</span>님 👋
+                  반가워요, <span className="text-cyan-600">{isLoggedIn ? (userProfile?.name || '사용자') : '게스트'}</span>님 👋
                 </h1>
                 <p className="text-gray-500 mt-2">오늘도 목표 달성을 위해 한 걸음 더 나아가 볼까요?</p>
               </section>
@@ -200,14 +193,14 @@ export const App: React.FC = () => {
                   <div className="flex flex-col gap-8">
                     <div className="w-full">
                       <SpecScore
-                        score={userProfile?.isInfoInputted ? dashboardScore.score : 0}
-                        percentile={userProfile?.isInfoInputted ? dashboardScore.percentile : 0}
-                        isInfoInputted={userProfile?.isInfoInputted}
+                        score={dashboardScore.score}
+                        percentile={dashboardScore.percentile}
+                        isInfoInputted={!!analyticsResult}
                         onDiagnose={() => setCurrentView('flow-test')}
                         onShowReport={() => navigate('report')}
                       />
                     </div>
-                    {userProfile?.isInfoInputted && (
+                    {(
                       <div className="bg-white/60 backdrop-blur-sm border border-white/60 rounded-2xl p-6 md:p-8 shadow-sm">
                         <div className="flex justify-between items-center mb-6">
                           <h3 className="text-lg font-bold text-gray-900">역량 포트폴리오</h3>
@@ -246,12 +239,16 @@ export const App: React.FC = () => {
                             </div>
                             <div className="bg-gray-50/50 rounded-xl p-4 border border-gray-100 flex-1">
                               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                                {skills.map((skill, i) => (
+                                {skills.length > 0 ? skills.map((skill, i) => (
                                   <div key={i} className="flex flex-col items-center justify-center p-3 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all text-center">
                                     <span className="text-2xl mb-1">{skill.icon}</span>
                                     <span className="text-xs font-bold text-gray-700">{skill.name}</span>
                                   </div>
-                                ))}
+                                )) : (
+                                  <div className="col-span-full text-center py-6 text-sm text-gray-400">
+                                    등록된 스킬이 없습니다.
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -261,7 +258,7 @@ export const App: React.FC = () => {
                   </div>
                 </section>
 
-                {userProfile?.isInfoInputted && (
+                {(
                   <>
                     <div className="w-full h-px bg-gradient-to-r from-transparent via-gray-300/50 to-transparent" />
                     <section id="mentors">
@@ -356,6 +353,42 @@ export const App: React.FC = () => {
         {currentView === 'admin-dashboard' && (
           <div className="relative w-full">
             <AdminDashboard />
+          </div>
+        )}
+
+        {/* VIEW 11: COMMUNITY PAGE */}
+        {currentView === 'community' && (
+          <div className="relative w-full pt-36 pb-20">
+            <CommunityPage 
+                onPostClick={(id) => {
+                    setSelectedPostId(id);
+                    navigate('community-post');
+                }}
+                onCreatePostClick={() => navigate('community-create')}
+            />
+          </div>
+        )}
+
+        {/* VIEW 11.5: COMMUNITY CREATE POST */}
+        {currentView === 'community-create' && (
+          <div className="relative w-full pt-36 pb-20">
+            <CreatePostPage 
+                onBack={() => navigate('community')}
+                onSuccess={(newId) => {
+                    setSelectedPostId(newId);
+                    navigate('community-post');
+                }}
+            />
+          </div>
+        )}
+
+        {/* VIEW 12: COMMUNITY POST DETAIL */}
+        {currentView === 'community-post' && selectedPostId && (
+          <div className="relative w-full pt-36 pb-20">
+            <PostDetail 
+                postId={selectedPostId} 
+                onBack={() => navigate('community')} 
+            />
           </div>
         )}
 

@@ -15,7 +15,8 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
     const [loadingStep, setLoadingStep] = useState(0);
     const [showResult, setShowResult] = useState(false);
 
-    if (!userProfile?.isInfoInputted) {
+    // 분석 데이터가 없으면 정보 입력 유도 화면
+    if (!analyticsData) {
         return (
             <div className="w-full h-full min-h-[600px] flex flex-col items-center justify-center animate-fade-in-up">
                 <GlassCard className="p-12 text-center max-w-lg mx-auto shadow-2xl">

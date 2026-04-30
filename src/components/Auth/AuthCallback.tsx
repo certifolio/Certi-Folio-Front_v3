@@ -16,15 +16,16 @@ export const AuthCallback: React.FC = () => {
         const token = params.get('token');
 
         if (token) {
+            // URL에서 토큰 즉시 제거 (주소창 노출 방지 + 히스토리에 남지 않도록)
+            window.history.replaceState({}, document.title, window.location.pathname);
+
             handleOAuthCallback(token).then(() => {
-                // 로그인 성공 → 대시보드로 이동
                 navigate('dashboard');
             }).catch((err) => {
                 console.error('OAuth callback failed:', err);
                 navigate('login');
             });
         } else {
-            // 토큰 없으면 로그인 페이지로
             navigate('login');
         }
     }, []);

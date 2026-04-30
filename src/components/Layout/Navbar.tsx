@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '../UI/Button';
+import { notificationApi } from '../../api/notificationApi';
 
-export type ViewType = 'home' | 'dashboard' | 'jobs' | 'login' | 'report' | 'flow-test' | 'info-management' | 'mentoring' | 'notifications' | 'admin-dashboard' | 'auth-callback';
+export type ViewType = 'home' | 'dashboard' | 'jobs' | 'login' | 'report' | 'flow-test' | 'info-management' | 'mentoring' | 'notifications' | 'admin-dashboard' | 'auth-callback' | 'community' | 'community-post' | 'community-create';
 
 interface NavbarProps {
     isLoggedIn: boolean;
@@ -14,11 +15,28 @@ interface NavbarProps {
 import { useAuth } from '../../contexts/AuthContext';
 
 export const Navbar = ({ isLoggedIn, onLoginToggle, onNavigate, currentView, onOpenAdmin }: NavbarProps) => {
-    const { userProfile, userData } = useAuth();
+    const { userProfile } = useAuth();
     const [showNotif, setShowNotif] = useState(false);
     const [showProfileMenu, setShowProfileMenu] = useState(false);
+    const [recentNotifs, setRecentNotifs] = useState<any[]>([]);
     const notifRef = useRef<HTMLDivElement>(null);
     const profileRef = useRef<HTMLDivElement>(null);
+
+    // 최근 알림 불러오기
+    const loadRecentNotifs = useCallback(async () => {
+        if (!isLoggedIn) return;
+        try {
+            const res = await notificationApi.getRecentNotifications();
+            const items = Array.isArray(res) ? res : (res?.notifications || []);
+            setRecentNotifs(items.slice(0, 5));
+        } catch {
+            setRecentNotifs([]);
+        }
+    }, [isLoggedIn]);
+
+    useEffect(() => {
+        if (isLoggedIn) loadRecentNotifs();
+    }, [isLoggedIn, loadRecentNotifs]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -38,6 +56,7 @@ export const Navbar = ({ isLoggedIn, onLoginToggle, onNavigate, currentView, onO
         { label: '정보 입력', view: 'flow-test' as const },
         { label: '멘토링', view: 'mentoring' as const },
         { label: '채용 정보', view: 'jobs' as const },
+        { label: '커뮤니티', view: 'community' as const },
     ];
 
     return (
@@ -68,7 +87,7 @@ export const Navbar = ({ isLoggedIn, onLoginToggle, onNavigate, currentView, onO
                 <div className="flex items-center gap-4">
 
                     {/* Admin Button - only visible for admins */}
-                    {userProfile?.isAdmin && (
+                    {userProfile?.role === 'ADMIN' && (
                         <button
                             onClick={onOpenAdmin}
                             className="text-xs font-bold text-gray-400 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
@@ -97,14 +116,14 @@ export const Navbar = ({ isLoggedIn, onLoginToggle, onNavigate, currentView, onO
                                             <span className="text-xs text-cyan-600 cursor-pointer hover:underline">모두 읽음</span>
                                         </div>
                                         <div className="overflow-y-auto flex-1">
-                                            <div className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 transition-colors group">
-                                                <p className="text-xs text-gray-800 font-bold mb-1 group-hover:text-cyan-700">📢 네이버 채용 마감 임박</p>
-                                                <p className="text-[10px] text-gray-500 leading-relaxed">관심 등록한 'FE 개발자 신입 공채'가 3일 뒤 마감됩니다.</p>
-                                            </div>
-                                            <div className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 transition-colors group">
-                                                <p className="text-xs text-gray-800 font-bold mb-1 group-hover:text-cyan-700">✅ 멘토링 승인 완료</p>
-                                                <p className="text-[10px] text-gray-500 leading-relaxed">김서연 멘토님과의 멘토링이 확정되었습니다.</p>
-                                            </div>
+                                            {recentNotifs.length > 0 ? recentNotifs.map((n: any) => (
+                                                <div key={n.id} className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 transition-colors group">
+                                                    <p className="text-xs text-gray-800 font-bold mb-1 group-hover:text-cyan-700">{n.title}</p>
+                                                    <p className="text-[10px] text-gray-500 leading-relaxed">{n.message || n.content || ''}</p>
+                                                </div>
+                                            )) : (
+                                                <div className="p-6 text-center text-xs text-gray-400">새로운 알림이 없습니다.</div>
+                                            )}
                                         </div>
                                         <div className="p-2 border-t border-gray-100 bg-white flex-shrink-0 text-center">
                                             <button
@@ -129,10 +148,10 @@ export const Navbar = ({ isLoggedIn, onLoginToggle, onNavigate, currentView, onO
                                 {showProfileMenu && (
                                     <div className="absolute top-full right-0 mt-2 w-48 bg-white/95 backdrop-blur-xl rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-fade-in-up origin-top-right z-50">
                                         <div className="p-4 border-b border-gray-50 flex items-center gap-3">
-                                            <img src={userProfile?.profileImage || "https://picsum.photos/50/50?random=99"} className="w-8 h-8 rounded-full object-cover" alt="Profile" />
+                                            <img src={userProfile?.picture || "https://picsum.photos/50/50?random=99"} className="w-8 h-8 rounded-full object-cover" alt="Profile" />
                                             <div>
-                                                <p className="text-xs font-bold text-gray-900">{userProfile?.name || userData?.name || '사용자'}</p>
-                                                <p className="text-[10px] text-gray-500">{userProfile?.email || 'email@example.com'}</p>
+                                                <p className="text-xs font-bold text-gray-900">{userProfile?.name || '사용자'}</p>
+                                                <p className="text-[10px] text-gray-500">{userProfile?.email || ''}</p>
                                             </div>
                                         </div>
                                         <div className="py-1">
