@@ -27,13 +27,10 @@ interface FullUserData {
   activities: ActivityData[];
   certificates: CertificateData[];
   careers: CareerData[];
-  solvedAcId: string;
 }
 
-const LOCAL_STORAGE_KEY = 'neon_spec_flow_data';
-
 export const InfoManagement: React.FC = () => {
-  const { userProfile } = useAuth();
+  const { isLoggedIn, token, userProfile } = useAuth();
   // Set default active tab to 'education' since 'basic' is removed
   const [activeTab, setActiveTab] = useState('education');
 
@@ -43,46 +40,188 @@ export const InfoManagement: React.FC = () => {
   const [userData, setUserData] = useState<FullUserData>({
     name: userProfile?.name || '', birthYear: '',
     academicStatus: '', schoolName: '', major: '', degree: '', startDate: '', endDate: '', gpa: '', maxGpa: '',
-    projects: [], activities: [], certificates: [], careers: [], solvedAcId: ''
+    projects: [], activities: [], certificates: [], careers: []
+  });
+  const [isLoading, setIsLoading] = useState(false);
+
+  const mapProjectFromApi = (project: any): ProjectData => ({
+    projectName: project.projectName || project.name || '',
+    isTeam: project.isTeam || project.type || '',
+    startDate: project.startDate || '',
+    endDate: project.endDate || '',
+    role: project.role || '',
+    techStack: Array.isArray(project.techStack)
+      ? project.techStack
+      : String(project.techStack || '').split(',').map((stack) => stack.trim()).filter(Boolean),
+    description: project.description || '',
+    links: {
+      github: project.links?.github || project.githubLink || '',
+      demo: project.links?.demo || project.demoLink || '',
+    },
+    outcome: project.outcome || project.result || '',
+  });
+
+  const mapActivityFromApi = (activity: any): ActivityData => ({
+    id: String(activity.id || ''),
+    activityName: activity.activityName || activity.name || '',
+    activityType: activity.activityType || activity.type || '',
+    role: activity.role || '',
+    startDate: activity.startDate || activity.startMonth || '',
+    endDate: activity.endDate || activity.endMonth || '',
+    description: activity.description || '',
+    achievement: activity.achievement || activity.result || '',
+  });
+
+  const mapCertificateFromApi = (certificate: any): CertificateData => ({
+    id: String(certificate.id || ''),
+    type: ['language', 'lang'].includes(certificate.type) ? 'language' : 'general',
+    name: certificate.name || certificate.certificateName || '',
+    issuer: certificate.issuer || '',
+    date: certificate.date || certificate.issueDate || '',
+    score: certificate.score || '',
+    certId: certificate.certId || certificate.certificateNumber || '',
+  });
+
+  const mapCareerFromApi = (career: any): CareerData => ({
+    id: String(career.id || ''),
+    type: career.type === 'career' ? 'career' : 'intern',
+    companyName: career.companyName || career.company || '',
+    department: career.department || career.position || '',
+    position: career.position || '',
+    startDate: career.startDate || '',
+    endDate: career.endDate || '',
+    description: career.description || '',
+  });
+
+  const toBackendPayload = (data: FullUserData) => ({
+    educations: data.schoolName ? [{
+      schoolName: data.schoolName,
+      major: data.major,
+      degree: data.degree,
+      status: data.academicStatus,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      gpa: data.gpa ? parseFloat(data.gpa) : null,
+      maxGpa: data.maxGpa ? parseFloat(data.maxGpa) : null,
+    }] : [],
+    projects: data.projects.map((project) => ({
+      name: project.projectName,
+      type: project.isTeam,
+      role: project.role,
+      techStack: Array.isArray(project.techStack) ? project.techStack.join(', ') : project.techStack,
+      description: project.description,
+      githubLink: project.links?.github || '',
+      demoLink: project.links?.demo || '',
+      result: project.outcome,
+      startDate: project.startDate,
+      endDate: project.endDate,
+    })),
+    activities: data.activities.map((activity) => ({
+      name: activity.activityName,
+      type: activity.activityType,
+      role: activity.role,
+      startMonth: activity.startDate,
+      endMonth: activity.endDate,
+      description: activity.description,
+      result: activity.achievement,
+    })),
+    certificates: data.certificates.map((certificate) => ({
+      name: certificate.name,
+      type: certificate.type,
+      issuer: certificate.issuer || '',
+      issueDate: certificate.date,
+      score: certificate.score,
+      certificateNumber: certificate.certId || '',
+    })),
+    careers: data.careers.map((career) => ({
+      type: career.type,
+      company: career.companyName,
+      position: career.position || career.department,
+      startDate: career.startDate,
+      endDate: career.endDate,
+      description: career.description,
+    })),
   });
 
   // Load Data
   useEffect(() => {
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (saved) {
-      try {
-        setUserData(JSON.parse(saved));
-      } catch {
-        // 파싱 실패 시 초기값 유지
-      }
-    }
-  }, []);
+    if (!isLoggedIn || !token) return;
 
-  // Helper to save data to local storage instantly
-  const saveToStorage = (newData: FullUserData) => {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newData));
+    const loadFromBackend = async () => {
+      setIsLoading(true);
+      try {
+        const [educations, projects, activities, certificates, careers] = await Promise.allSettled([
+          portfolioApi.getEducations(),
+          portfolioApi.getProjects(),
+          portfolioApi.getActivities(),
+          portfolioApi.getCertificates(),
+          portfolioApi.getCareers(),
+        ]);
+
+        const education = educations.status === 'fulfilled' && Array.isArray(educations.value) ? educations.value[0] : null;
+        const loadedData: FullUserData = {
+          name: userProfile?.name || '',
+          birthYear: userProfile?.birthYear ? String(userProfile.birthYear) : '',
+          academicStatus: education?.status || education?.academicStatus || '',
+          schoolName: education?.schoolName || '',
+          major: education?.major || '',
+          degree: education?.degree || '',
+          startDate: education?.startDate || '',
+          endDate: education?.endDate || '',
+          gpa: education?.gpa != null ? String(education.gpa) : '',
+          maxGpa: education?.maxGpa != null ? String(education.maxGpa) : '',
+          projects: projects.status === 'fulfilled' && Array.isArray(projects.value) ? projects.value.map(mapProjectFromApi) : [],
+          activities: activities.status === 'fulfilled' && Array.isArray(activities.value) ? activities.value.map(mapActivityFromApi) : [],
+          certificates: certificates.status === 'fulfilled' && Array.isArray(certificates.value) ? certificates.value.map(mapCertificateFromApi) : [],
+          careers: careers.status === 'fulfilled' && Array.isArray(careers.value) ? careers.value.map(mapCareerFromApi) : [],
+        };
+
+        setUserData(loadedData);
+      } catch (e) {
+        console.error("Failed to load user info from backend", e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadFromBackend();
+  }, [isLoggedIn, token, userProfile?.name, userProfile?.birthYear]);
+
+  const persistData = async (newData: FullUserData) => {
     setUserData(newData);
+
+    if (!isLoggedIn || !token) return;
+
+    const payload = toBackendPayload(newData);
+    const results = await Promise.allSettled([
+      portfolioApi.saveEducations(payload.educations),
+      portfolioApi.saveProjects(payload.projects),
+      portfolioApi.saveActivities(payload.activities),
+      portfolioApi.saveCertificates(payload.certificates),
+      portfolioApi.saveCareers(payload.careers),
+      newData.name ? userApi.saveOnboarding({
+        name: newData.name,
+        birthYear: parseInt(newData.birthYear) || 2000,
+        companyType: '',
+        jobRole: '',
+      }) : Promise.resolve(),
+    ]);
+
+    const failed = results.find((result) => result.status === 'rejected');
+    if (failed) {
+      throw (failed as PromiseRejectedResult).reason;
+    }
   };
 
   // Manual Save Button Handler (for text inputs in Education/Etc)
   const handleManualSave = async () => {
-    saveToStorage(userData);
-
-    // Sync to Backend
-    if (userData.name) {
-      try {
-        await userApi.saveOnboarding({
-          name: userData.name,
-          birthYear: parseInt(userData.birthYear) || 2000,
-          companyType: '',
-          jobRole: '',
-        });
-      } catch (e) {
-        console.error("Failed to sync user info", e);
-      }
+    try {
+      await persistData(userData);
+      alert('정보가 수정되었습니다.');
+    } catch (e) {
+      console.error("Failed to sync user info", e);
+      alert('정보 저장 중 오류가 발생했습니다.');
     }
-
-    alert('정보가 수정되었습니다.');
   };
 
   const handleChange = (field: string, value: any) => {
@@ -90,27 +229,27 @@ export const InfoManagement: React.FC = () => {
   };
 
   // Flow Completion Handlers
-  const handleProjectAdd = (newProject: ProjectData) => {
+  const handleProjectAdd = async (newProject: ProjectData) => {
     const updated = { ...userData, projects: [...userData.projects, newProject] };
-    saveToStorage(updated);
+    await persistData(updated);
     setAddingMode(null);
   };
 
-  const handleActivityAdd = (newActivity: ActivityData) => {
+  const handleActivityAdd = async (newActivity: ActivityData) => {
     const updated = { ...userData, activities: [...userData.activities, newActivity] };
-    saveToStorage(updated);
+    await persistData(updated);
     setAddingMode(null);
   };
 
-  const handleCertAdd = (newCert: CertificateData) => {
+  const handleCertAdd = async (newCert: CertificateData) => {
     const updated = { ...userData, certificates: [...userData.certificates, newCert] };
-    saveToStorage(updated);
+    await persistData(updated);
     setAddingMode(null);
   };
 
-  const handleCareerAdd = (newCareer: CareerData) => {
+  const handleCareerAdd = async (newCareer: CareerData) => {
     const updated = { ...userData, careers: [...userData.careers, newCareer] };
-    saveToStorage(updated);
+    await persistData(updated);
     setAddingMode(null);
   };
 
@@ -121,7 +260,6 @@ export const InfoManagement: React.FC = () => {
     { id: 'activities', label: '대외활동', icon: '🤝' },
     { id: 'certificates', label: '자격증/어학', icon: '📜' },
     { id: 'career', label: '경력/인턴', icon: '💼' },
-    { id: 'etc', label: '기타/설정', icon: '⚙️' },
   ];
 
   const renderContent = () => {
@@ -221,8 +359,7 @@ export const InfoManagement: React.FC = () => {
                         <button className="p-2 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
                         <button className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" onClick={() => {
                           const newProjects = userData.projects.filter((_, i) => i !== idx);
-                          handleChange('projects', newProjects);
-                          handleManualSave();
+                          persistData({ ...userData, projects: newProjects });
                         }}><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                       </div>
                     </div>
@@ -282,8 +419,7 @@ export const InfoManagement: React.FC = () => {
                         <button className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
                         <button className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" onClick={() => {
                           const newActs = userData.activities.filter((_, i) => i !== idx);
-                          handleChange('activities', newActs);
-                          handleManualSave();
+                          persistData({ ...userData, activities: newActs });
                         }}><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                       </div>
                     </div>
@@ -341,8 +477,7 @@ export const InfoManagement: React.FC = () => {
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button className="p-2 text-gray-300 hover:text-red-500 transition-colors" onClick={() => {
                         const newCerts = userData.certificates.filter((_, i) => i !== idx);
-                        handleChange('certificates', newCerts);
-                        handleManualSave();
+                        persistData({ ...userData, certificates: newCerts });
                       }}>
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                       </button>
@@ -395,8 +530,7 @@ export const InfoManagement: React.FC = () => {
                         <button className="text-xs text-gray-400 hover:text-green-600">수정</button>
                         <button className="text-xs text-gray-400 hover:text-red-500" onClick={() => {
                           const newCar = userData.careers.filter((_, i) => i !== idx);
-                          handleChange('careers', newCar);
-                          handleManualSave();
+                          persistData({ ...userData, careers: newCar });
                         }}>삭제</button>
                       </div>
 
@@ -421,47 +555,6 @@ export const InfoManagement: React.FC = () => {
           </div>
         );
 
-      case 'etc':
-        return (
-          <div className="max-w-xl mx-auto py-4 animate-fade-in-up">
-            <div className="text-center mb-10">
-              <div className="w-16 h-16 bg-gray-100 text-gray-600 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4 shadow-sm border border-gray-200">
-                ⚙️
-              </div>
-              <h3 className="text-2xl font-extrabold text-gray-900">기타 설정</h3>
-              <p className="text-gray-500 text-sm mt-1">외부 서비스 연동 및 계정 설정을 관리합니다.</p>
-            </div>
-
-            <div className="bg-white/60 p-8 rounded-3xl border border-white/60 shadow-sm space-y-8">
-              <div className="bg-gradient-to-br from-[#2dce89]/10 to-[#2dce89]/5 p-6 rounded-2xl border border-[#2dce89]/20 relative overflow-hidden">
-                <div className="relative z-10">
-                  <div className="flex items-center gap-3 mb-4">
-                    <img src="https://static.solved.ac/logo.svg" alt="solved.ac" className="w-8 h-8 opacity-80" onError={(e) => { e.currentTarget.style.display = 'none' }} />
-                    <h4 className="font-bold text-gray-800 text-lg">Solved.ac 연동</h4>
-                  </div>
-                  <p className="text-sm text-gray-600 mb-6 leading-relaxed">
-                    백준(BOJ) 계정을 연동하면 알고리즘 문제 해결 역량을<br />
-                    AI가 자동으로 분석하여 포트폴리오에 반영합니다.
-                  </p>
-                  <Input
-                    label="백준 아이디"
-                    placeholder="아이디 입력 (예: neon_dev)"
-                    value={userData.solvedAcId}
-                    onChange={(e) => handleChange('solvedAcId', e.target.value)}
-                    className="bg-white/80"
-                  />
-                </div>
-                {/* Decorative circle */}
-                <div className="absolute -top-10 -right-10 w-32 h-32 bg-[#2dce89] rounded-full opacity-10 blur-2xl"></div>
-              </div>
-
-              <div className="pt-4">
-                <Button variant="primary" onClick={handleManualSave} className="w-full py-4 text-lg font-bold shadow-lg shadow-gray-200">설정 저장하기</Button>
-              </div>
-            </div>
-          </div>
-        );
-
       default:
         return null;
     }
@@ -479,6 +572,14 @@ export const InfoManagement: React.FC = () => {
         <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-4 tracking-tight">내 정보 관리</h2>
         <p className="text-gray-500 text-lg">저장된 스펙 정보를 확인하고 수정할 수 있습니다.</p>
       </div>
+
+      {isLoading && (
+        <div className="max-w-3xl mx-auto px-6 pb-8">
+          <GlassCard className="p-6 text-center text-gray-500 font-bold">
+            DB에서 저장된 정보를 불러오는 중입니다...
+          </GlassCard>
+        </div>
+      )}
 
       <div className="w-full max-w-[1600px] mx-auto px-6 grid grid-cols-1 lg:grid-cols-[16rem_1fr] xl:grid-cols-[1fr_800px_1fr] gap-8 relative items-start">
 

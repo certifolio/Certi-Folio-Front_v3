@@ -14,6 +14,7 @@ import { AdminDashboard } from './components/Admin/AdminDashboard';
 import { CommunityPage } from './components/Community/CommunityPage';
 import { CreatePostPage } from './components/Community/CreatePostPage';
 import { PostDetail } from './components/Community/PostDetail';
+import { PortfolioDraftPage } from './components/Portfolio/PortfolioDraftPage';
 
 // Extracted components
 import { TypingEffect } from './components/UI/TypingEffect';
@@ -56,6 +57,7 @@ export const App: React.FC = () => {
     percentile: 0,
   });
   const [analyticsResult, setAnalyticsResult] = useState<AnalyticsResult | null>(null);
+  const [skills, setSkills] = useState<{ name: string; icon: string }[]>([]);
 
   // 백엔드에서 대시보드 데이터 로드
   useEffect(() => {
@@ -73,6 +75,22 @@ export const App: React.FC = () => {
           })));
         }
 
+        const projectsRes = await portfolioApi.getProjects().catch(() => null);
+        if (projectsRes && Array.isArray(projectsRes)) {
+          const uniqueSkills = Array.from(new Set(
+            projectsRes.flatMap((project: any) => {
+              const rawStack = project.techStack || project.techStacks || '';
+              return Array.isArray(rawStack)
+                ? rawStack
+                : String(rawStack).split(',');
+            })
+              .map((stack: unknown) => String(stack).trim())
+              .filter(Boolean)
+          ));
+
+          setSkills(uniqueSkills.map((name) => ({ name, icon: '⚙️' })));
+        }
+
         const analyticsRes = await analyticsApi.getLatest().catch(() => null);
         if (analyticsRes) {
           setAnalyticsResult(analyticsRes);
@@ -84,9 +102,6 @@ export const App: React.FC = () => {
     };
     loadDashboardData();
   }, [isLoggedIn]);
-
-  // 스킬 데이터 — 추후 백엔드 연동 시 API에서 로드
-  const skills: { name: string; icon: string }[] = [];
 
 
 
@@ -286,7 +301,7 @@ export const App: React.FC = () => {
           <div className="relative w-full pt-36 pb-20">
             {!isLoggedIn && <FullPageLockOverlay onLogin={() => setCurrentView('login')} />}
             <div className={`${!isLoggedIn ? 'blur-md opacity-40 select-none pointer-events-none' : ''}`}>
-              <SpecFlowTest />
+              <SpecFlowTest onAnalysisComplete={setAnalyticsResult} />
             </div>
           </div>
         )}
@@ -366,6 +381,13 @@ export const App: React.FC = () => {
                 }}
                 onCreatePostClick={() => navigate('community-create')}
             />
+          </div>
+        )}
+
+        {/* VIEW 11.2: PORTFOLIO DRAFT */}
+        {currentView === 'portfolio-draft' && (
+          <div className="relative w-full pt-24 pb-20">
+            <PortfolioDraftPage />
           </div>
         )}
 

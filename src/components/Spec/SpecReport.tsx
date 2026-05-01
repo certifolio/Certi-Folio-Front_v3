@@ -58,13 +58,15 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
 
     // 실제 API 데이터 or 폴백
     const scores = analyticsData?.categoryScores;
+    const getCategoryScore = (key: string) => scores?.[key] ?? 50;
+
     const stats = {
-        gpa: scores?.['학점전공'] ?? 50,
-        language: scores?.['어학역량'] ?? 50,
-        project: scores?.['프로젝트경험'] ?? 50,
-        career: scores?.['실무경력'] ?? 50,
-        activity: scores?.['대외활동'] ?? 50,
-        certificate: scores?.['자격증어학'] ?? 50,
+        gpa: getCategoryScore('학점전공'),
+        language: getCategoryScore('어학'),
+        project: getCategoryScore('프로젝트경험'),
+        career: getCategoryScore('실무경력'),
+        activity: getCategoryScore('대외활동'),
+        certificate: getCategoryScore('자격증'),
     };
 
     const totalScore = analyticsData?.overallScore ?? Math.round(Object.values(stats).reduce((a, b) => a + b, 0) / 6);
@@ -201,10 +203,10 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
                             {[
                                 { label: '실무 경력', score: stats.career, color: 'bg-cyan-500' },
                                 { label: '프로젝트 경험', score: stats.project, color: 'bg-indigo-500' },
-                                { label: '자격증/어학', score: stats.certificate, color: 'bg-purple-500' },
+                                { label: '자격증', score: stats.certificate, color: 'bg-purple-500' },
                                 { label: '학점/전공', score: stats.gpa, color: 'bg-blue-500' },
                                 { label: '대외활동', score: stats.activity, color: 'bg-green-500' },
-                                { label: '어학 역량', score: stats.language, color: 'bg-orange-400' },
+                                { label: '어학', score: stats.language, color: 'bg-orange-400' },
                             ].map((item, idx) => (
                                 <div key={idx}>
                                     <div className="flex justify-between text-xs mb-1.5 font-bold text-gray-700">
@@ -279,7 +281,7 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10">
                 {[
-                    { title: '코딩 테스트 대비', desc: '백준 골드 3단계 목표', status: 'urgent', icon: '🔥' },
+                    { title: '기술 면접 대비', desc: '직무별 핵심 질문 정리', status: 'urgent', icon: '🔥' },
                     { title: 'CS 지식 보완', desc: '네트워크/OS 핵심 정리', status: 'normal', icon: '📚' },
                     { title: '팀 프로젝트 고도화', desc: '배포 및 성능 최적화 경험', status: 'recommended', icon: '💻' },
                     { title: '현직자 멘토링', desc: '이력서/포트폴리오 첨삭', status: 'normal', icon: '🤝' },
@@ -293,16 +295,6 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
                         {item.status === 'urgent' && <span className="self-start px-2 py-0.5 bg-red-100 text-red-600 text-[10px] font-bold rounded">우선순위 높음</span>}
                     </GlassCard>
                 ))}
-            </div>
-
-            {/* Bottom Action */}
-            <div className="flex flex-col md:flex-row gap-4 justify-center items-center mt-12">
-                <Button variant="secondary" className="w-full md:w-auto px-8 py-4" onClick={() => window.print()}>
-                    리포트 PDF 저장
-                </Button>
-                <Button variant="neon" className="w-full md:w-auto px-12 py-4 text-lg font-bold shadow-cyan-500/30" onClick={onGoToDashboard}>
-                    대시보드에서 관리 시작하기
-                </Button>
             </div>
 
         </div>

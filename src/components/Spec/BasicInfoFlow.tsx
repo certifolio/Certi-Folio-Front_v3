@@ -28,8 +28,6 @@ export const BasicInfoFlow: React.FC<BasicInfoFlowProps> = ({ initialData, onCom
   
   // Refs
   const inputRef = useRef<HTMLInputElement>(null);
-  const yearListRef = useRef<HTMLDivElement>(null);
-  const defaultYearRef = useRef<HTMLButtonElement>(null);
 
   // --- Data & Constants ---
   const companyTypes = [
@@ -85,12 +83,12 @@ export const BasicInfoFlow: React.FC<BasicInfoFlowProps> = ({ initialData, onCom
 
   // Developer-focused Job Roles
   const jobRoles: { [key: string]: string[] } = {
-    big_corp: ['Backend (Java/Spring)', 'Frontend (React/Vue)', 'Mobile App (Android/iOS)', 'Data Engineer', 'AI/ML Researcher', 'System Software (Embedded)', 'Security Engineer', 'DevOps/Infra'],
-    it_service: ['Server Developer', 'Web Frontend', 'Android Developer', 'iOS Developer', 'Data Scientist', 'Machine Learning Eng', 'SRE (Site Reliability Eng)', 'QA/Test Engineer'],
-    finance: ['Core Banking 개발', '계정계/정보계 개발', '금융 플랫폼 프론트엔드', 'Data Analyst (금융 데이터)', '블록체인/Digital Asset', '보안/정보보호', 'IT 기획/PM'],
-    public: ['전산직 (SW 개발/운영)', '정보보안', '네트워크/시스템 관리', 'DBA', 'IT 사업 관리'],
-    startup: ['Full Stack Developer', 'Frontend Lead', 'Backend (Node/Python/Go)', 'Growth Engineer', 'Data Analyst', 'CTO/Tech Lead', 'Blockchain Engineer'],
-    etc: ['SI 개발자 (Java/JSP)', 'SM (시스템 운영)', '솔루션 엔지니어', '웹 퍼블리셔', 'ERP 개발', '임베디드 SW']
+    big_corp: ['백엔드 개발자', '프론트엔드 개발자', '모바일 앱 개발자', '데이터 엔지니어', 'AI/머신러닝 연구원', '임베디드/시스템 소프트웨어 개발자', '보안 엔지니어', '데브옵스/인프라 엔지니어'],
+    it_service: ['서버 개발자', '웹 프론트엔드 개발자', '안드로이드 개발자', 'iOS 개발자', '데이터 사이언티스트', '머신러닝 엔지니어', '사이트 신뢰성 엔지니어', 'QA/테스트 엔지니어'],
+    finance: ['코어뱅킹 개발자', '계정계/정보계 개발자', '금융 플랫폼 프론트엔드 개발자', '금융 데이터 분석가', '블록체인/디지털 자산 개발자', '보안/정보보호 담당자', 'IT 기획/프로덕트 매니저'],
+    public: ['전산직 개발/운영 담당자', '정보보안 담당자', '네트워크/시스템 관리자', '데이터베이스 관리자', 'IT 사업 관리 담당자'],
+    startup: ['풀스택 개발자', '프론트엔드 리드', '백엔드 개발자', '그로스 엔지니어', '데이터 분석가', '기술 리드/CTO', '블록체인 엔지니어'],
+    etc: ['SI 개발자', '시스템 운영 담당자', '솔루션 엔지니어', '웹 퍼블리셔', 'ERP 개발자', '임베디드 소프트웨어 개발자']
   };
 
   const steps = [
@@ -100,13 +98,6 @@ export const BasicInfoFlow: React.FC<BasicInfoFlowProps> = ({ initialData, onCom
       inputType: 'name_confirm',
       question: (d: BasicInfoData) => isEditingName ? "정확한 이름을 알려주세요." : `회원님의 성함이\n'${d.name}'님이 맞으신가요?`,
       subtext: isEditingName ? "입력해주신 정보로 리포트가 생성됩니다." : "기존 회원 정보와 일치하는지 확인해주세요."
-    },
-    {
-      id: 'birthYear',
-      category: '기본 정보',
-      inputType: 'year_list',
-      question: () => "출생 연도를 알려주세요.",
-      subtext: "연령대별 경쟁자 데이터 비교를 위해 필요합니다."
     },
     {
       id: 'targetCompanyType',
@@ -130,15 +121,6 @@ export const BasicInfoFlow: React.FC<BasicInfoFlowProps> = ({ initialData, onCom
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isEditingName]);
-
-  // Scroll to 2000 when year step opens
-  useEffect(() => {
-    if (steps[currentStep].inputType === 'year_list' && defaultYearRef.current) {
-      setTimeout(() => {
-        defaultYearRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 300);
-    }
-  }, [currentStep]);
 
   // --- Handlers ---
   const handleNext = (val: string, extraData?: any) => {
@@ -236,34 +218,7 @@ export const BasicInfoFlow: React.FC<BasicInfoFlowProps> = ({ initialData, onCom
               </div>
             )}
 
-            {/* 2. Birth Year List */}
-            {currentStepData.inputType === 'year_list' && (
-               <div className="w-full animate-fade-in-up relative max-w-xs mx-auto flex flex-col items-center">
-                  <div ref={yearListRef} className="h-[400px] w-full overflow-y-auto no-scrollbar py-24 scroll-smooth" style={{ maskImage: 'linear-gradient(to bottom, transparent, black 15%, black 85%, transparent)' }}>
-                    <div className="flex flex-col gap-2 text-center">
-                        {Array.from({ length: 60 }, (_, i) => new Date().getFullYear() - 10 - i).map(year => (
-                             <button
-                               key={year}
-                               ref={year === 2000 ? defaultYearRef : null}
-                               onClick={() => handleNext(year.toString())}
-                               className={`w-full py-2 transition-all duration-300 leading-none ${
-                                 year.toString() === data.birthYear 
-                                 ? 'text-5xl font-black text-cyan-600 scale-110' 
-                                 : 'text-3xl font-bold text-gray-300 hover:text-cyan-700 hover:scale-105 hover:opacity-100'
-                               }`}
-                             >
-                               {year}
-                             </button>
-                        ))}
-                    </div>
-                  </div>
-                  <button onClick={() => handleNext('skip')} className="mt-4 text-gray-400 hover:text-gray-600 font-medium underline text-sm transition-colors">
-                      건너뛰기
-                  </button>
-               </div>
-            )}
-
-            {/* 3. Company Type Select */}
+            {/* 2. Company Type Select */}
             {currentStepData.inputType === 'company_select' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full animate-fade-in-up">
                   {companyTypes.map((company) => (
@@ -282,7 +237,7 @@ export const BasicInfoFlow: React.FC<BasicInfoFlowProps> = ({ initialData, onCom
                 </div>
             )}
 
-            {/* 4. Job Role Select */}
+            {/* 3. Job Role Select */}
             {currentStepData.inputType === 'role_select' && (
                 <div className="w-full max-w-4xl animate-fade-in-up">
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
