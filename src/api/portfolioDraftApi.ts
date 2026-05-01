@@ -27,7 +27,7 @@ export const portfolioDraftApi = {
   /** 이미지 업로드 - multipart/form-data POST /api/portfolio/draft/{id}/image */
   uploadImage: async (draftId: number, file: File): Promise<string> => {
     const token = localStorage.getItem('access_token');
-    const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+    const BASE_URL = import.meta.env.VITE_API_URL || 'http://54.180.82.115:8080';
     const formData = new FormData();
     formData.append('file', file);
     const res = await fetch(`${BASE_URL}${BASE}/${draftId}/image`, {
