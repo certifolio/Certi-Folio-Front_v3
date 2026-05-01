@@ -73,7 +73,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     // 앱 시작 시: localStorage에 토큰이 있으면 서버에 유효성 검증
+    // 단, /auth/callback 경로에서는 AuthCallback 컴포넌트가 토큰 처리를 담당하므로 건너뜀
     useEffect(() => {
+        // OAuth 콜백 중이면 AuthCallback이 토큰을 직접 처리
+        if (window.location.pathname === '/auth/callback') return;
+
         const savedToken = localStorage.getItem('access_token');
         if (savedToken) {
             fetchUserProfile().catch(() => {

@@ -96,20 +96,22 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
           }
 
           setHistory(prev => {
+            // 중복 체크: 이미 같은 id의 메시지가 있으면 무시
+            if (newMsg.id && prev.some(m => m.id === newMsg.id)) {
+              return prev;
+            }
             // 내가 보낸 메시지: optimistic update (id 없는 'me' 메시지) 교체
             if (newMsg.sender === 'me') {
               const hasOptimistic = prev.some(m => !m.id && m.sender === 'me');
               if (hasOptimistic) {
-                // 첫 번째 optimistic 메시지를 서버 확인 메시지로 교체
                 let replaced = false;
-                const updated = prev.map(m => {
+                return prev.map(m => {
                   if (!replaced && !m.id && m.sender === 'me') {
                     replaced = true;
                     return newMsg;
                   }
                   return m;
                 });
-                return updated;
               }
             }
             return [...prev, newMsg];
@@ -153,7 +155,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
 
         // 2. 기존 메시지 로드
         try {
-          const historyRes = await chatApi.getRecentMessages(roomId);
+          const historyRes = await chatApi.getMessages(roomId);
           const messages = historyRes.messages || [];
           if (Array.isArray(messages) && messages.length > 0) {
             const mapped = messages.map((m: any) => mapMessage(m));
@@ -305,11 +307,11 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
               <div className="text-center text-xs text-gray-400 my-4 bg-gray-100/50 py-1 px-3 rounded-full mx-auto w-fit">채팅 시작</div>
               {history.map((msg, idx) => (
                 msg.sender === 'system' ? (
-                  <div key={msg.id || idx} className="text-center text-xs text-gray-400 bg-gray-100/50 py-1 px-3 rounded-full mx-auto w-fit">
+                  <div key={`msg-${msg.id ?? `temp-${idx}`}`} className="text-center text-xs text-gray-400 bg-gray-100/50 py-1 px-3 rounded-full mx-auto w-fit">
                     {msg.text}
                   </div>
                 ) : (
-                  <div key={msg.id || idx} className={`flex ${msg.sender === 'me' ? 'justify-start' : 'justify-end'}`}>
+                  <div key={`msg-${msg.id ?? `temp-${idx}`}`} className={`flex ${msg.sender === 'me' ? 'justify-start' : 'justify-end'}`}>
                     <div className={`flex flex-col ${msg.sender === 'me' ? 'items-start' : 'items-end'} max-w-[70%]`}>
                       {msg.sender === 'other' && msg.senderName && (
                         <span className="text-[11px] text-gray-500 mb-1 px-1">{msg.senderName}</span>
