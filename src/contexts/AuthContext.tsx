@@ -66,7 +66,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const handleLogout = () => {
         localStorage.removeItem('access_token');
-        localStorage.removeItem('neon_spec_flow_data');
         setToken(null);
         setUserProfile(null);
         setIsLoggedIn(false);

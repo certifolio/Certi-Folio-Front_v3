@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '../UI/Button';
 import { notificationApi } from '../../api/notificationApi';
 
-export type ViewType = 'home' | 'dashboard' | 'jobs' | 'login' | 'report' | 'flow-test' | 'info-management' | 'mentoring' | 'notifications' | 'admin-dashboard' | 'auth-callback' | 'community' | 'community-post' | 'community-create';
+export type ViewType = 'home' | 'dashboard' | 'jobs' | 'login' | 'report' | 'flow-test' | 'info-management' | 'portfolio-draft' | 'mentoring' | 'notifications' | 'admin-dashboard' | 'auth-callback' | 'community' | 'community-post' | 'community-create';
 
 interface NavbarProps {
     isLoggedIn: boolean;
@@ -54,6 +54,7 @@ export const Navbar = ({ isLoggedIn, onLoginToggle, onNavigate, currentView, onO
     const navItems = [
         { label: 'AI 진단', view: 'dashboard' as const },
         { label: '정보 입력', view: 'flow-test' as const },
+        { label: '포트폴리오', view: 'portfolio-draft' as const },
         { label: '멘토링', view: 'mentoring' as const },
         { label: '채용 정보', view: 'jobs' as const },
         { label: '커뮤니티', view: 'community' as const },
