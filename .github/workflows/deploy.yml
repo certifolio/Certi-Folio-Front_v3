@@ -14,7 +14,7 @@ jobs:
       - name: 2. Node.js 세팅
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: 3. 패키지 설치 및 React 빌드
         run: |
@@ -22,7 +22,7 @@ jobs:
           npm run build
 
       - name: 4. 완성된 화면 파일들을 EC2 프론트엔드 폴더로 전달
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}

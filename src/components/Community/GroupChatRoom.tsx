@@ -35,17 +35,25 @@ export const GroupChatRoom: React.FC<GroupChatRoomProps> = ({ roomId, roomName, 
     const [loadingMore, setLoadingMore] = useState(false);
 
     const scrollRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
     const stompClientRef = useRef<Client | null>(null);
-    const messageIdsRef = useRef<Set<number>>(new Set());
+    // 항상 최신 userId를 유지 (클로저 안에서 사용)
+    const currentUserIdRef = useRef<number | null>(null);
+    currentUserIdRef.current = currentUserId;
 
+    // senderId 비교만 사용 — isMine은 WebSocket 브로드캐스트에서 신뢰할 수 없어 완전 배제
     const mapMessage = useCallback((m: any): DisplayMessage => ({
         id: m.id,
-        sender: m.type === 'SYSTEM' ? 'system' : (m.senderId === currentUserId || m.isMine ? 'me' : 'other'),
+        sender: m.type === 'SYSTEM'
+            ? 'system'
+            : (currentUserIdRef.current !== null && Number(m.senderId) === currentUserIdRef.current
+                ? 'me'
+                : 'other'),
         senderName: m.senderName,
         senderProfileImage: m.senderProfileImage,
         text: m.content,
         sentAt: m.sentAt,
-    }), [currentUserId]);
+    }), []);
 
     // WebSocket 연결
     const connectWebSocket = useCallback((rId: number) => {
@@ -70,23 +78,24 @@ export const GroupChatRoom: React.FC<GroupChatRoomProps> = ({ roomId, roomName, 
                     const data = JSON.parse(msg.body);
                     const newMsg = mapMessage(data);
 
-                    if (newMsg.id && messageIdsRef.current.has(newMsg.id)) return;
-                    if (newMsg.id) messageIdsRef.current.add(newMsg.id);
-
+                    console.log('[GroupChat] WS 수신:', {
+                        senderId: data.senderId,
+                        currentUserId: currentUserIdRef.current,
+                        isMine: Number(data.senderId) === currentUserIdRef.current,
+                        content: data.content?.slice(0, 20),
+                    });
                     setHistory(prev => {
-                        if (newMsg.sender === 'me') {
-                            const hasOptimistic = prev.some(m => !m.id && m.sender === 'me');
-                            if (hasOptimistic) {
-                                let replaced = false;
-                                return prev.map(m => {
-                                    if (!replaced && !m.id && m.sender === 'me') {
-                                        replaced = true;
-                                        return newMsg;
-                                    }
-                                    return m;
-                                });
-                            }
+                        // 중복 제거: 동일 id가 이미 있으면 무시
+                        if (newMsg.id != null && prev.some(m => m.id === newMsg.id)) return prev;
+
+                        // 서버 senderId가 틀릴 수 있으므로, text로 매칭되는 optimistic 'me' 메시지가 있으면 교체
+                        const optimisticIdx = prev.findIndex(m => !m.id && m.sender === 'me' && m.text === newMsg.text);
+                        if (optimisticIdx !== -1) {
+                            const updated = [...prev];
+                            updated[optimisticIdx] = { ...newMsg, sender: 'me' };
+                            return updated;
                         }
+
                         return [...prev, newMsg];
                     });
                 } catch (e) {
@@ -106,12 +115,10 @@ export const GroupChatRoom: React.FC<GroupChatRoomProps> = ({ roomId, roomName, 
         const init = async () => {
             setLoading(true);
             setHistory([]);
-            messageIdsRef.current = new Set();
 
             try {
                 const res = await groupChatApi.getMessages(roomId);
-                const msgs = (res.messages || []).map(mapMessage);
-                msgs.forEach((m: DisplayMessage) => { if (m.id) messageIdsRef.current.add(m.id); });
+                const msgs = (res.messages || []).map((m: any) => mapMessage(m));
                 setHistory(msgs);
                 setHasMore(res.hasNext);
                 setNextCursor(res.nextCursor);
@@ -131,7 +138,7 @@ export const GroupChatRoom: React.FC<GroupChatRoomProps> = ({ roomId, roomName, 
             }
             setWsConnected(false);
         };
-    }, [roomId, connectWebSocket, mapMessage]);
+    }, [roomId, connectWebSocket, mapMessage, currentUserId]);
 
     // 이전 메시지 로드
     const loadOlderMessages = async () => {
@@ -139,9 +146,12 @@ export const GroupChatRoom: React.FC<GroupChatRoomProps> = ({ roomId, roomName, 
         setLoadingMore(true);
         try {
             const res = await groupChatApi.getMessages(roomId, nextCursor);
-            const msgs = (res.messages || []).map(mapMessage);
-            msgs.forEach((m: DisplayMessage) => { if (m.id) messageIdsRef.current.add(m.id); });
-            setHistory(prev => [...msgs, ...prev]);
+            const msgs = (res.messages || []).map((m: any) => mapMessage(m));
+            setHistory(prev => {
+                const existingIds = new Set(prev.map(m => m.id));
+                const fresh = msgs.filter(m => m.id == null || !existingIds.has(m.id));
+                return [...fresh, ...prev];
+            });
             setHasMore(res.hasNext);
             setNextCursor(res.nextCursor);
         } catch (err) {
@@ -181,6 +191,7 @@ export const GroupChatRoom: React.FC<GroupChatRoomProps> = ({ roomId, roomName, 
             });
         } finally {
             setSending(false);
+            inputRef.current?.focus();
         }
     };
 
@@ -238,11 +249,11 @@ export const GroupChatRoom: React.FC<GroupChatRoomProps> = ({ roomId, roomName, 
                 ) : (
                     history.map((msg, idx) => (
                         msg.sender === 'system' ? (
-                            <div key={msg.id || idx} className="text-center text-xs text-gray-400 bg-gray-100/50 py-1 px-3 rounded-full mx-auto w-fit">
+                            <div key={msg.id != null ? msg.id : `temp-${idx}`} className="text-center text-xs text-gray-400 bg-gray-100/50 py-1 px-3 rounded-full mx-auto w-fit">
                                 {msg.text}
                             </div>
                         ) : (
-                            <div key={msg.id || idx} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
+                            <div key={msg.id != null ? msg.id : `temp-${idx}`} className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}>
                                 {msg.sender === 'other' && (
                                     <div className="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0 mr-2 overflow-hidden flex items-center justify-center text-xs font-bold text-gray-500">
                                         {msg.senderProfileImage ? (
@@ -275,12 +286,12 @@ export const GroupChatRoom: React.FC<GroupChatRoomProps> = ({ roomId, roomName, 
             <div className="p-4 bg-white border-t border-gray-100 flex-shrink-0">
                 <form onSubmit={(e) => { e.preventDefault(); handleSend(message); }} className="flex gap-3">
                     <input
+                        ref={inputRef}
                         type="text"
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
                         placeholder="메시지를 입력하세요..."
-                        disabled={sending}
-                        className="flex-1 bg-gray-100 border-none rounded-2xl px-5 py-3 focus:ring-2 focus:ring-cyan-500 outline-none text-sm transition-all disabled:opacity-50"
+                        className="flex-1 bg-gray-100 border-none rounded-2xl px-5 py-3 focus:ring-2 focus:ring-cyan-500 outline-none text-sm transition-all"
                     />
                     <button
                         type="submit"

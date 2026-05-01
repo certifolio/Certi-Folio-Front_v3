@@ -39,6 +39,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
   const [sending, setSending] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const stompClientRef = useRef<Client | null>(null);
   const messageIdsRef = useRef<Set<number>>(new Set());
   const lastSeqRef = useRef<number>(0);
@@ -307,6 +308,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
       });
     } finally {
       setSending(false);
+      inputRef.current?.focus();
     }
   };
 
@@ -427,11 +429,12 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
             >
               <div className="relative flex-1">
                 <input
+                  ref={inputRef}
                   type="text"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder={chatRoomId ? "메시지를 입력하세요..." : "연결 중..."}
-                  disabled={!chatRoomId || sending}
+                  disabled={!chatRoomId}
                   className="w-full bg-gray-100 border-none rounded-2xl px-6 py-4 focus:ring-2 focus:ring-cyan-500 outline-none text-sm transition-all pr-12 disabled:opacity-50"
                 />
               </div>

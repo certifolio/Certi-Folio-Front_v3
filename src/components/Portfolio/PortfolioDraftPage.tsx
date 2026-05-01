@@ -2,7 +2,7 @@
  * PortfolioDraftPage — 포트폴리오 초안 작성 메인 페이지
  * 좌측 사이드바(컨트롤) + 중앙 템플릿 프리뷰 (인라인 편집)
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { PortfolioTemplate } from './PortfolioTemplate';
 import { portfolioDraftApi } from '../../api/portfolioDraftApi';
 import type { PortfolioDraftResponse, PortfolioDraftContent } from '../../types/portfolio';
@@ -15,6 +15,29 @@ export const PortfolioDraftPage: React.FC = () => {
   const [saved, setSaved] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageCopied, setImageCopied] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 이미지 업로드 핸들러
+  const handleImageUpload = useCallback(async (file: File) => {
+    if (!draft) return;
+    if (!file.type.startsWith('image/')) {
+      setError('이미지 파일만 업로드할 수 있습니다.');
+      return;
+    }
+    setImageUploading(true);
+    setError(null);
+    try {
+      const url = await portfolioDraftApi.uploadImage(draft.id, file);
+      setImageUrl(url);
+    } catch (e: any) {
+      setError(e?.message || '이미지 업로드에 실패했습니다.');
+    } finally {
+      setImageUploading(false);
+    }
+  }, [draft]);
 
   // 저장된 초안 불러오기
   useEffect(() => {
@@ -425,6 +448,63 @@ export const PortfolioDraftPage: React.FC = () => {
           <button onClick={handleDelete} className="w-full text-xs text-red-400 hover:text-red-600 py-1.5 transition-colors">
             🗑 초안 삭제
           </button>
+
+          <hr className="my-4 border-gray-100" />
+
+          {/* 이미지 업로드 */}
+          <div>
+            <h4 className="font-bold text-xs text-gray-700 mb-2 flex items-center gap-1">🖼 이미지 업로드</h4>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleImageUpload(file);
+                e.target.value = '';
+              }}
+            />
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files?.[0];
+                if (file) handleImageUpload(file);
+              }}
+              className="border-2 border-dashed border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-lg p-4 text-center cursor-pointer transition-all"
+            >
+              {imageUploading ? (
+                <div className="flex flex-col items-center gap-1">
+                  <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  <p className="text-xs text-blue-500">업로드 중...</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-1">
+                  <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                  </svg>
+                  <p className="text-xs text-gray-400">클릭 또는 드래그</p>
+                </div>
+              )}
+            </div>
+            {imageUrl && (
+              <div className="mt-2">
+                <img src={imageUrl} alt="업로드된 이미지" className="w-full rounded-lg border border-gray-100 object-cover max-h-24" />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(imageUrl);
+                    setImageCopied(true);
+                    setTimeout(() => setImageCopied(false), 2000);
+                  }}
+                  className="mt-1.5 w-full text-xs py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg transition-colors"
+                >
+                  {imageCopied ? '✅ URL 복사됨!' : '🔗 URL 복사'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
