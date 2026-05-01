@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import SockJS from 'sockjs-client';
 import { Client, IMessage } from '@stomp/stompjs';
 
-const WS_BASE_URL = import.meta.env.VITE_API_URL || 'http://ec2-3-35-37-53.ap-northeast-2.compute.amazonaws.com';
+const WS_BASE_URL = import.meta.env.VITE_API_URL || 'http://54.180.82.115';
 
 interface GroupChatRoomProps {
     roomId: number;
