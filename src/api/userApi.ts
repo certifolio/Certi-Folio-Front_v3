@@ -14,7 +14,6 @@ export const userApi = {
     /** 온보딩 정보 저장 - POST /api/users/me/onboarding */
     saveOnboarding: (data: {
         name: string;
-        birthYear: number;
         companyType: string;
         jobRole: string;
     }) => apiClient.post('/api/users/me/onboarding', data),
@@ -22,7 +21,6 @@ export const userApi = {
     /** 내 정보 수정 - PATCH /api/users/me */
     updateMyInfo: (data: {
         name: string;
-        birthYear: number;
         companyType: string;
         jobRole: string;
     }) => apiClient.patch('/api/users/me', data),

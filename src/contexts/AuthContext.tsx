@@ -9,7 +9,8 @@ interface UserProfile {
     picture: string | null;
     role: string; // 'USER' | 'ADMIN'
     provider: string;
-    birthYear: number | null;
+    companyType: string | null;
+    jobRole: string | null;
 }
 
 interface AuthContextType {

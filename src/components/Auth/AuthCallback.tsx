@@ -29,7 +29,7 @@ export const AuthCallback: React.FC = () => {
 
         if (extractedToken) {
             // URL에서 토큰 제거 (주소창 노출 방지)
-            window.history.replaceState({}, document.title, window.location.pathname);
+            window.history.replaceState({}, document.title, '/auth/callback');
 
             handleOAuthCallback(extractedToken).then(() => {
                 navigate('dashboard');

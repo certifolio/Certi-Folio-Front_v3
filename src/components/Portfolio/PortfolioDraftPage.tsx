@@ -342,14 +342,6 @@ export const PortfolioDraftPage: React.FC = () => {
   if (generating) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <div className="relative w-24 h-24 mb-8">
-          <div className="absolute inset-0 rounded-2xl bg-blue-100 animate-pulse" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <svg className="w-12 h-12 text-blue-500 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-            </svg>
-          </div>
-        </div>
         <h3 className="text-xl font-bold text-gray-900 mb-2">AI가 포트폴리오를 작성하고 있습니다</h3>
         <p className="text-sm text-gray-500">입력하신 정보를 분석하여 각 섹션을 생성 중...</p>
         <div className="flex items-center gap-2 mt-4">

@@ -8,12 +8,132 @@ interface SpecReportProps {
     onGoToDashboard: () => void;
     onDiagnose?: () => void;
     analyticsData?: AnalyticsResult | null;
+    onGoToInfoManagement?: () => void;
+    onRetargetAndReanalyze?: (payload: { targetCompanyType: string; targetJobRole: string }) => Promise<void> | void;
+    isLoading?: boolean;
 }
 
-export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagnose, analyticsData }) => {
+export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagnose, analyticsData, onGoToInfoManagement, onRetargetAndReanalyze, isLoading = false }) => {
     const { userProfile } = useAuth();
     const [loadingStep, setLoadingStep] = useState(0);
-    const [showResult, setShowResult] = useState(false);
+    const [isTargetEditOpen, setIsTargetEditOpen] = useState(false);
+    const [selectedCompanyType, setSelectedCompanyType] = useState('big_corp');
+    const [selectedJobRole, setSelectedJobRole] = useState('');
+    const [isReanalyzing, setIsReanalyzing] = useState(false);
+
+    const companyTypes = [
+        { id: '대기업', label: '대기업' },
+        { id: 'IT 서비스 기업', label: 'IT 서비스 기업' },
+        { id: '금융권', label: '금융권' },
+        { id: '공기업/공공기관', label: '공기업/공공기관' },
+        { id: '스타트업', label: '스타트업' },
+        { id: '기타/SI/SM', label: '기타/SI/SM' },
+    ];
+
+    const jobRoles: Record<string, string[]> = {
+        '대기업': ['백엔드 개발자', '프론트엔드 개발자', '모바일 앱 개발자', '데이터 엔지니어', 'AI/머신러닝 연구원', '임베디드/시스템 소프트웨어 개발자', '보안 엔지니어', '데브옵스/인프라 엔지니어'],
+        'IT 서비스 기업': ['서버 개발자', '웹 프론트엔드 개발자', '안드로이드 개발자', 'iOS 개발자', '데이터 사이언티스트', '머신러닝 엔지니어', '사이트 신뢰성 엔지니어', 'QA/테스트 엔지니어'],
+        '금융권': ['코어뱅킹 개발자', '계정계/정보계 개발자', '금융 플랫폼 프론트엔드 개발자', '금융 데이터 분석가', '블록체인/디지털 자산 개발자', '보안/정보보호 담당자', 'IT 기획/프로덕트 매니저'],
+        '공기업/공공기관': ['전산직 개발/운영 담당자', '정보보안 담당자', '네트워크/시스템 관리자', '데이터베이스 관리자', 'IT 사업 관리 담당자'],
+        '스타트업': ['풀스택 개발자', '프론트엔드 리드', '백엔드 개발자', '그로스 엔지니어', '데이터 분석가', '기술 리드/CTO', '블록체인 엔지니어'],
+        '기타/SI/SM': ['SI 개발자', '시스템 운영 담당자', '솔루션 엔지니어', '웹 퍼블리셔', 'ERP 개발자', '임베디드 소프트웨어 개발자'],
+    };
+
+    useEffect(() => {
+        if (userProfile?.companyType && jobRoles[userProfile.companyType]) {
+            setSelectedCompanyType(userProfile.companyType);
+        }
+        if (userProfile?.jobRole) {
+            setSelectedJobRole(userProfile.jobRole);
+        }
+    }, [userProfile?.companyType, userProfile?.jobRole]);
+
+    useEffect(() => {
+        const roles = jobRoles[selectedCompanyType] || [];
+        if (!roles.includes(selectedJobRole)) {
+            setSelectedJobRole(roles[0] || '');
+        }
+    }, [selectedCompanyType, selectedJobRole]);
+
+    const loadingMessages = [
+        "희망 회사와 직무를 반영하고 있습니다",
+        "저장된 스펙을 다시 정리하고 있습니다",
+        "강점과 보완점을 다시 계산하고 있습니다",
+        "리포트를 더 정확하게 다듬고 있습니다",
+    ];
+
+    useEffect(() => {
+        if (!isLoading) {
+            setLoadingStep(0);
+            return;
+        }
+
+        if (loadingStep < loadingMessages.length - 1) {
+            const timer = setTimeout(() => {
+                setLoadingStep(prev => prev + 1);
+            }, 1600);
+            return () => clearTimeout(timer);
+        }
+
+        const loopTimer = setTimeout(() => {
+            setLoadingStep(0);
+        }, 1600);
+        return () => clearTimeout(loopTimer);
+    }, [isLoading, loadingMessages.length, loadingStep]);
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[600px] w-full max-w-4xl mx-auto">
+                <style>{`
+                    @keyframes gentle-bounce {
+                        0%, 100% {
+                            transform: translateY(0);
+                            opacity: 0.7;
+                        }
+                        50% {
+                            transform: translateY(-8px);
+                            opacity: 1;
+                        }
+                    }
+                `}</style>
+                <div className="relative w-24 h-24 mb-8">
+                    <div className="absolute inset-0 rounded-3xl bg-cyan-50 animate-pulse" style={{ animationDuration: '2.6s' }} />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="flex gap-2">
+                            <div className="w-3 h-3 rounded-full bg-cyan-500" style={{ animation: 'gentle-bounce 1.8s ease-in-out infinite', animationDelay: '0ms' }} />
+                            <div className="w-3 h-3 rounded-full bg-blue-500" style={{ animation: 'gentle-bounce 1.8s ease-in-out infinite', animationDelay: '220ms' }} />
+                            <div className="w-3 h-3 rounded-full bg-purple-500" style={{ animation: 'gentle-bounce 1.8s ease-in-out infinite', animationDelay: '440ms' }} />
+                        </div>
+                    </div>
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-3 transition-all duration-300 text-center">
+                    {loadingMessages[loadingStep]}
+                </h2>
+                <p className="text-sm text-gray-500 text-center leading-relaxed mb-8">
+                    최신 희망 회사와 직무 기준으로<br />
+                    커리어 분석 리포트를 다시 생성하고 있습니다.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-2xl">
+                    {[
+                        "희망 조건 반영",
+                        "스펙 재분석",
+                        "리포트 재구성",
+                    ].map((item, index) => (
+                        <div
+                            key={item}
+                            className={`rounded-2xl border px-4 py-4 text-sm font-semibold transition-all duration-300 ${
+                                index === loadingStep % 3
+                                    ? 'bg-white border-cyan-200 text-cyan-700 shadow-md'
+                                    : 'bg-gray-50/80 border-gray-200 text-gray-400'
+                            }`}
+                        >
+                            {item}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
 
     // 분석 데이터가 없으면 정보 입력 유도 화면
     if (!analyticsData) {
@@ -37,25 +157,6 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
         );
     }
 
-    const loadingMessages = [
-        "데이터 분석 중...",
-        `${userProfile?.bio || '직무'} 공고 스캔...`,
-        "합격자 데이터 비교...",
-        "로드맵 생성 중...",
-        "완료!"
-    ];
-
-    useEffect(() => {
-        if (loadingStep < loadingMessages.length) {
-            const timer = setTimeout(() => {
-                setLoadingStep(prev => prev + 1);
-            }, 250);
-            return () => clearTimeout(timer);
-        } else {
-            setTimeout(() => setShowResult(true), 100);
-        }
-    }, [loadingStep]);
-
     // 실제 API 데이터 or 폴백
     const scores = analyticsData?.categoryScores;
     const getCategoryScore = (key: string) => scores?.[key] ?? 50;
@@ -74,10 +175,12 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
     const improvements = analyticsData?.improvements ?? [];
     const summary = analyticsData?.summary ?? '';
 
-    let grade = 'B';
+    let grade = 'C';
     if (totalScore >= 90) grade = 'S';
-    else if (totalScore >= 80) grade = 'A';
-    else if (totalScore >= 70) grade = 'B+';
+    else if (totalScore >= 80) grade = 'A+';
+    else if (totalScore >= 70) grade = 'A';
+    else if (totalScore >= 60) grade = 'B+';
+    else if (totalScore >= 50) grade = 'B';
 
     const radius = 80;
     const strokeWidth = 16;
@@ -98,25 +201,19 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
         return points.join(' ');
     };
 
-    if (!showResult) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-[600px] w-full max-w-4xl mx-auto">
-                <div className="relative w-20 h-20 mb-6">
-                    <div className="absolute inset-0 border-4 border-gray-100 rounded-full"></div>
-                    <div className="absolute inset-0 border-4 border-cyan-500 rounded-full border-t-transparent animate-spin"></div>
-                </div>
-                <h2 className="text-xl font-bold text-gray-900 mb-2 transition-all duration-300">
-                    {loadingMessages[Math.min(loadingStep, loadingMessages.length - 1)]}
-                </h2>
-                <div className="w-48 h-1.5 bg-gray-100 rounded-full mt-2 overflow-hidden">
-                    <div
-                        className="h-full bg-cyan-500 transition-all duration-200 ease-linear"
-                        style={{ width: `${(loadingStep / loadingMessages.length) * 100}%` }}
-                    ></div>
-                </div>
-            </div>
-        );
-    }
+    const handleRetargetSubmit = async () => {
+        if (!selectedCompanyType || !selectedJobRole) return;
+        setIsReanalyzing(true);
+        try {
+            await onRetargetAndReanalyze?.({
+                targetCompanyType: selectedCompanyType,
+                targetJobRole: selectedJobRole,
+            });
+            setIsTargetEditOpen(false);
+        } finally {
+            setIsReanalyzing(false);
+        }
+    };
 
     return (
         <div className="w-full max-w-6xl mx-auto pb-20 animate-fade-in-up px-4">
@@ -130,6 +227,62 @@ export const SpecReport: React.FC<SpecReportProps> = ({ onGoToDashboard, onDiagn
                     <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-600 to-purple-600">{userProfile?.name || '사용자'}</span>님의 커리어 분석 리포트
                 </h1>
                 <p className="text-gray-500 text-lg">목표하신 직무 적합도를 분석했습니다.</p>
+                <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+                    <Button
+                        variant="primary"
+                        onClick={() => setIsTargetEditOpen((prev) => !prev)}
+                        className="px-6 py-3 text-sm font-bold"
+                    >
+                        희망 회사와 직무만 변경
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        onClick={onGoToInfoManagement}
+                        className="px-6 py-3 text-sm font-bold"
+                    >
+                        정보 수정하기
+                    </Button>
+                </div>
+                {isTargetEditOpen && (
+                    <GlassCard className="mt-6 p-6 max-w-2xl mx-auto text-left">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">희망 회사 유형</label>
+                                <select
+                                    value={selectedCompanyType}
+                                    onChange={(e) => setSelectedCompanyType(e.target.value)}
+                                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:border-cyan-500"
+                                >
+                                    {companyTypes.map((company) => (
+                                        <option key={company.id} value={company.id}>{company.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">희망 직무</label>
+                                <select
+                                    value={selectedJobRole}
+                                    onChange={(e) => setSelectedJobRole(e.target.value)}
+                                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:border-cyan-500"
+                                >
+                                    {(jobRoles[selectedCompanyType] || []).map((role) => (
+                                        <option key={role} value={role}>{role}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="mt-5 flex justify-end">
+                            <Button
+                                variant="neon"
+                                onClick={handleRetargetSubmit}
+                                className="px-6 py-3 text-sm font-bold"
+                                disabled={isReanalyzing || !selectedJobRole}
+                            >
+                                {isReanalyzing ? '다시 진단 중...' : '다시 진단 돌리기'}
+                            </Button>
+                        </div>
+                    </GlassCard>
+                )}
             </div>
 
             {/* Score & Radar */}

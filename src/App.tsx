@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { MentorGrid } from './components/Mentors/MentorGrid';
 import { MentoringPage } from './components/Mentors/MentoringPage';
 import { Button } from './components/UI/Button';
@@ -25,7 +26,7 @@ import { Navbar } from './components/Layout/Navbar';
 // Contexts
 import { useAuth } from "./contexts/AuthContext";
 import { useApp } from "./contexts/AppContext";
-import { portfolioApi } from "./api/userApi";
+import { portfolioApi, userApi } from "./api/userApi";
 import { analyticsApi, type AnalyticsResult } from "./api/analyticsApi";
 
 export const App: React.FC = () => {
@@ -33,6 +34,7 @@ export const App: React.FC = () => {
     isLoggedIn,
     userProfile,
     handleLogout,
+    refreshProfile,
   } = useAuth();
 
   const {
@@ -40,8 +42,8 @@ export const App: React.FC = () => {
     showAdmin, setShowAdmin,
   } = useApp();
 
+  const location = useLocation();
   const [line1Done, setLine1Done] = useState(false);
-  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
 
   const [certificates, setCertificates] = useState<
     {
@@ -58,6 +60,61 @@ export const App: React.FC = () => {
   });
   const [analyticsResult, setAnalyticsResult] = useState<AnalyticsResult | null>(null);
   const [skills, setSkills] = useState<{ name: string; icon: string }[]>([]);
+  const [isReportLoading, setIsReportLoading] = useState(false);
+  const selectedPostId = location.pathname.match(/^\/community\/([^/]+)$/)?.[1] ?? null;
+
+  const applyAnalyticsResult = useCallback((result: AnalyticsResult | null) => {
+    setAnalyticsResult(result);
+    if (result) {
+      setDashboardScore({ score: result.overallScore, percentile: Math.max(5, 100 - result.overallScore) });
+    }
+  }, []);
+
+  const handleInfoInputEntry = useCallback(async () => {
+    if (!isLoggedIn) {
+      setCurrentView('login');
+      return;
+    }
+
+    try {
+      const specs = await portfolioApi.getAllSpecs().catch(() => null);
+      const hasEducation = Array.isArray(specs?.educations) && specs.educations.length > 0;
+      const hasProjects = Array.isArray(specs?.projects) && specs.projects.length > 0;
+      const hasActivities = Array.isArray(specs?.activities) && specs.activities.length > 0;
+      const hasCertificates = Array.isArray(specs?.certificates) && specs.certificates.length > 0;
+      const hasCareers = Array.isArray(specs?.careers) && specs.careers.length > 0;
+
+      if (hasEducation || hasProjects || hasActivities || hasCertificates || hasCareers) {
+        navigate('info-management');
+        return;
+      }
+    } catch (err) {
+      console.warn('스펙 존재 여부 확인 실패:', err);
+    }
+
+    navigate('flow-test');
+  }, [isLoggedIn, navigate, setCurrentView]);
+
+  const handleRerunAnalysis = useCallback(async () => {
+    setIsReportLoading(true);
+    navigate('report');
+    try {
+      const result = await analyticsApi.analyzePortfolio();
+      applyAnalyticsResult(result);
+    } finally {
+      setIsReportLoading(false);
+    }
+  }, [applyAnalyticsResult, navigate]);
+
+  const handleRetargetAndReanalyze = useCallback(async ({ targetCompanyType, targetJobRole }: { targetCompanyType: string; targetJobRole: string }) => {
+    await userApi.updateMyInfo({
+      name: userProfile?.name || '',
+      companyType: targetCompanyType,
+      jobRole: targetJobRole,
+    });
+    await refreshProfile();
+    await handleRerunAnalysis();
+  }, [handleRerunAnalysis, refreshProfile, userProfile?.name]);
 
   // 백엔드에서 대시보드 데이터 로드
   useEffect(() => {
@@ -93,15 +150,14 @@ export const App: React.FC = () => {
 
         const analyticsRes = await analyticsApi.getLatest().catch(() => null);
         if (analyticsRes) {
-          setAnalyticsResult(analyticsRes);
-          setDashboardScore({ score: analyticsRes.overallScore, percentile: Math.max(5, 100 - analyticsRes.overallScore) });
+          applyAnalyticsResult(analyticsRes);
         }
       } catch (err) {
         console.warn('대시보드 데이터 로드 실패:', err);
       }
     };
     loadDashboardData();
-  }, [isLoggedIn]);
+  }, [applyAnalyticsResult, isLoggedIn]);
 
 
 
@@ -128,6 +184,7 @@ export const App: React.FC = () => {
         onNavigate={navigate}
         currentView={currentView}
         onOpenAdmin={() => setShowAdmin(true)}
+        onInfoInputClick={handleInfoInputEntry}
       />
 
       <AdminControlModal
@@ -211,7 +268,7 @@ export const App: React.FC = () => {
                         score={dashboardScore.score}
                         percentile={dashboardScore.percentile}
                         isInfoInputted={!!analyticsResult}
-                        onDiagnose={() => setCurrentView('flow-test')}
+                        onDiagnose={handleInfoInputEntry}
                         onShowReport={() => navigate('report')}
                       />
                     </div>
@@ -301,7 +358,7 @@ export const App: React.FC = () => {
           <div className="relative w-full pt-36 pb-20">
             {!isLoggedIn && <FullPageLockOverlay onLogin={() => setCurrentView('login')} />}
             <div className={`${!isLoggedIn ? 'blur-md opacity-40 select-none pointer-events-none' : ''}`}>
-              <SpecFlowTest onAnalysisComplete={setAnalyticsResult} />
+              <SpecFlowTest onAnalysisComplete={applyAnalyticsResult} />
             </div>
           </div>
         )}
@@ -311,7 +368,7 @@ export const App: React.FC = () => {
           <div className="relative w-full pt-36 pb-20">
             {!isLoggedIn && <FullPageLockOverlay onLogin={() => setCurrentView('login')} />}
             <div className={`${!isLoggedIn ? 'blur-md opacity-40 select-none pointer-events-none' : ''}`}>
-              <InfoManagement />
+              <InfoManagement onRerunAnalysis={handleRerunAnalysis} />
             </div>
           </div>
         )}
@@ -347,8 +404,11 @@ export const App: React.FC = () => {
             <div className={`pt-36 pb-12 transition-all duration-500 ${!isLoggedIn ? 'blur-md opacity-40 select-none pointer-events-none' : ''}`}>
               <SpecReport
                 onGoToDashboard={() => setCurrentView("dashboard")}
-                onDiagnose={() => setCurrentView("flow-test")}
+                onDiagnose={handleInfoInputEntry}
                 analyticsData={analyticsResult}
+                onGoToInfoManagement={() => navigate('info-management')}
+                onRetargetAndReanalyze={handleRetargetAndReanalyze}
+                isLoading={isReportLoading}
               />
             </div>
           </div>
@@ -376,8 +436,7 @@ export const App: React.FC = () => {
           <div className="relative w-full pt-36 pb-20">
             <CommunityPage 
                 onPostClick={(id) => {
-                    setSelectedPostId(id);
-                    navigate('community-post');
+                    navigate('community-post', { postId: id });
                 }}
                 onCreatePostClick={() => navigate('community-create')}
             />
@@ -397,8 +456,7 @@ export const App: React.FC = () => {
             <CreatePostPage 
                 onBack={() => navigate('community')}
                 onSuccess={(newId) => {
-                    setSelectedPostId(newId);
-                    navigate('community-post');
+                    navigate('community-post', { postId: newId });
                 }}
             />
           </div>

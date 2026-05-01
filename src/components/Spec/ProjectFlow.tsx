@@ -4,6 +4,7 @@ import { Button } from '../UI/Button';
 import { MonthYearPicker } from '../UI/MonthYearPicker';
 
 export interface ProjectData {
+  id?: string;
   projectName: string;
   isTeam: string; // 'individual' | 'team'
   startDate: string;

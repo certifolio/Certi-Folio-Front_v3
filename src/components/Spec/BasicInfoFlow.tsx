@@ -4,7 +4,6 @@ import { Button } from '../UI/Button';
 
 interface BasicInfoData {
   name: string;
-  birthYear: string;
   targetCompanyType: string;
   targetJobRole: string;
 }

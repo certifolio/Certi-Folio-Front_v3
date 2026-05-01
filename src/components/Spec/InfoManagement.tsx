@@ -1,20 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { portfolioApi, userApi } from '../../api/userApi';
+import { userApi, portfolioApi } from '../../api/userApi';
 import { GlassCard } from '../UI/GlassCard';
 import { Button } from '../UI/Button';
 import { Input } from '../UI/Input';
+import { MonthYearPicker } from '../UI/MonthYearPicker';
+import { DatePicker } from '../UI/DatePicker';
 
 // Import Flow Components
 import { ProjectFlow, ProjectData } from './ProjectFlow';
 import { ActivityFlow, ActivityData } from './ActivityFlow';
 import { CertificateFlow, CertificateData } from './CertificateFlow';
 import { CareerFlow, CareerData } from './CareerFlow';
+import { analyticsApi } from '../../api/analyticsApi';
 
 // Interfaces (matching SpecFlowTest data structure)
 interface FullUserData {
+  educationId?: string;
   name: string;
-  birthYear: string;
+  targetCompanyType: string;
+  targetJobRole: string;
   academicStatus: string;
   schoolName: string;
   major: string;
@@ -29,26 +34,83 @@ interface FullUserData {
   careers: CareerData[];
 }
 
-export const InfoManagement: React.FC = () => {
-  const { isLoggedIn, token, userProfile } = useAuth();
-  // Set default active tab to 'education' since 'basic' is removed
-  const [activeTab, setActiveTab] = useState('education');
+interface InfoManagementProps {
+  onRerunAnalysis?: () => Promise<void> | void;
+}
+
+type EditableSection = 'projects' | 'activities' | 'certificates' | 'career';
+
+type EditModalState =
+  | { section: 'projects'; index: number; data: ProjectData }
+  | { section: 'activities'; index: number; data: ActivityData }
+  | { section: 'certificates'; index: number; data: CertificateData }
+  | { section: 'career'; index: number; data: CareerData };
+
+export const InfoManagement: React.FC<InfoManagementProps> = ({ onRerunAnalysis }) => {
+  const { isLoggedIn, token, userProfile, refreshProfile } = useAuth();
+  const [activeTab, setActiveTab] = useState('preferences');
 
   // State to track if we are in "Adding Mode" and which type
   const [addingMode, setAddingMode] = useState<'projects' | 'activities' | 'certificates' | 'career' | null>(null);
 
   const [userData, setUserData] = useState<FullUserData>({
-    name: userProfile?.name || '', birthYear: '',
-    academicStatus: '', schoolName: '', major: '', degree: '', startDate: '', endDate: '', gpa: '', maxGpa: '',
+    educationId: '',
+    name: userProfile?.name || '',
+    targetCompanyType: userProfile?.companyType || '',
+    targetJobRole: userProfile?.jobRole || '',
+    academicStatus: 'attending', schoolName: '', major: '', degree: 'bachelor', startDate: '', endDate: '', gpa: '', maxGpa: '',
     projects: [], activities: [], certificates: [], careers: []
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [addStatus, setAddStatus] = useState<{ kind: 'saving' | 'done'; message: string } | null>(null);
+  const [isRerunningAnalysis, setIsRerunningAnalysis] = useState(false);
+  const [editModal, setEditModal] = useState<EditModalState | null>(null);
+
+  const companyTypes = [
+    '대기업',
+    'IT 서비스 기업',
+    '금융권',
+    '공기업/공공기관',
+    '스타트업',
+    '기타/SI/SM',
+  ];
+
+  const jobRoles: Record<string, string[]> = {
+    '대기업': ['백엔드 개발자', '프론트엔드 개발자', '모바일 앱 개발자', '데이터 엔지니어', 'AI/머신러닝 연구원', '임베디드/시스템 소프트웨어 개발자', '보안 엔지니어', '데브옵스/인프라 엔지니어'],
+    'IT 서비스 기업': ['서버 개발자', '웹 프론트엔드 개발자', '안드로이드 개발자', 'iOS 개발자', '데이터 사이언티스트', '머신러닝 엔지니어', '사이트 신뢰성 엔지니어', 'QA/테스트 엔지니어'],
+    '금융권': ['코어뱅킹 개발자', '계정계/정보계 개발자', '금융 플랫폼 프론트엔드 개발자', '금융 데이터 분석가', '블록체인/디지털 자산 개발자', '보안/정보보호 담당자', 'IT 기획/프로덕트 매니저'],
+    '공기업/공공기관': ['전산직 개발/운영 담당자', '정보보안 담당자', '네트워크/시스템 관리자', '데이터베이스 관리자', 'IT 사업 관리 담당자'],
+    '스타트업': ['풀스택 개발자', '프론트엔드 리드', '백엔드 개발자', '그로스 엔지니어', '데이터 분석가', '기술 리드/CTO', '블록체인 엔지니어'],
+    '기타/SI/SM': ['SI 개발자', '시스템 운영 담당자', '솔루션 엔지니어', '웹 퍼블리셔', 'ERP 개발자', '임베디드 소프트웨어 개발자'],
+  };
+
+  const normalizeMonthYear = (value: string) => {
+    if (!value) return '';
+    const normalized = value.replace(/-/g, '.');
+    const parts = normalized.split('.');
+    if (parts.length >= 2) {
+      return `${parts[0]}.${parts[1].padStart(2, '0')}`;
+    }
+    return normalized;
+  };
+
+  const normalizeDate = (value: string) => {
+    if (!value) return '';
+    const normalized = value.replace(/-/g, '.');
+    const parts = normalized.split('.');
+    if (parts.length >= 3) {
+      return `${parts[0]}.${parts[1].padStart(2, '0')}.${parts[2].padStart(2, '0')}`;
+    }
+    return normalized;
+  };
 
   const mapProjectFromApi = (project: any): ProjectData => ({
+    id: String(project.id || ''),
     projectName: project.projectName || project.name || '',
     isTeam: project.isTeam || project.type || '',
-    startDate: project.startDate || '',
-    endDate: project.endDate || '',
+    startDate: normalizeMonthYear(project.startDate || ''),
+    endDate: normalizeMonthYear(project.endDate || ''),
     role: project.role || '',
     techStack: Array.isArray(project.techStack)
       ? project.techStack
@@ -66,8 +128,8 @@ export const InfoManagement: React.FC = () => {
     activityName: activity.activityName || activity.name || '',
     activityType: activity.activityType || activity.type || '',
     role: activity.role || '',
-    startDate: activity.startDate || activity.startMonth || '',
-    endDate: activity.endDate || activity.endMonth || '',
+    startDate: normalizeMonthYear(activity.startDate || activity.startMonth || ''),
+    endDate: normalizeMonthYear(activity.endDate || activity.endMonth || ''),
     description: activity.description || '',
     achievement: activity.achievement || activity.result || '',
   });
@@ -77,7 +139,7 @@ export const InfoManagement: React.FC = () => {
     type: ['language', 'lang'].includes(certificate.type) ? 'language' : 'general',
     name: certificate.name || certificate.certificateName || '',
     issuer: certificate.issuer || '',
-    date: certificate.date || certificate.issueDate || '',
+    date: normalizeDate(certificate.date || certificate.issueDate || ''),
     score: certificate.score || '',
     certId: certificate.certId || certificate.certificateNumber || '',
   });
@@ -88,60 +150,24 @@ export const InfoManagement: React.FC = () => {
     companyName: career.companyName || career.company || '',
     department: career.department || career.position || '',
     position: career.position || '',
-    startDate: career.startDate || '',
-    endDate: career.endDate || '',
+    startDate: normalizeMonthYear(career.startDate || ''),
+    endDate: normalizeMonthYear(career.endDate || ''),
     description: career.description || '',
   });
 
-  const toBackendPayload = (data: FullUserData) => ({
-    educations: data.schoolName ? [{
-      schoolName: data.schoolName,
-      major: data.major,
-      degree: data.degree,
-      status: data.academicStatus,
-      startDate: data.startDate,
-      endDate: data.endDate,
-      gpa: data.gpa ? parseFloat(data.gpa) : null,
-      maxGpa: data.maxGpa ? parseFloat(data.maxGpa) : null,
-    }] : [],
-    projects: data.projects.map((project) => ({
-      name: project.projectName,
-      type: project.isTeam,
-      role: project.role,
-      techStack: Array.isArray(project.techStack) ? project.techStack.join(', ') : project.techStack,
-      description: project.description,
-      githubLink: project.links?.github || '',
-      demoLink: project.links?.demo || '',
-      result: project.outcome,
-      startDate: project.startDate,
-      endDate: project.endDate,
-    })),
-    activities: data.activities.map((activity) => ({
-      name: activity.activityName,
-      type: activity.activityType,
-      role: activity.role,
-      startMonth: activity.startDate,
-      endMonth: activity.endDate,
-      description: activity.description,
-      result: activity.achievement,
-    })),
-    certificates: data.certificates.map((certificate) => ({
-      name: certificate.name,
-      type: certificate.type,
-      issuer: certificate.issuer || '',
-      issueDate: certificate.date,
-      score: certificate.score,
-      certificateNumber: certificate.certId || '',
-    })),
-    careers: data.careers.map((career) => ({
-      type: career.type,
-      company: career.companyName,
-      position: career.position || career.department,
-      startDate: career.startDate,
-      endDate: career.endDate,
-      description: career.description,
-    })),
-  });
+  const showSavedNotice = (message: string) => {
+    setSaveNotice(message);
+    window.setTimeout(() => {
+      setSaveNotice((current) => (current === message ? null : current));
+    }, 2500);
+  };
+
+  const completeAddFlow = (message: string) => {
+    setAddStatus({ kind: 'done', message });
+    window.setTimeout(() => {
+      window.location.reload();
+    }, 900);
+  };
 
   // Load Data
   useEffect(() => {
@@ -160,14 +186,16 @@ export const InfoManagement: React.FC = () => {
 
         const education = educations.status === 'fulfilled' && Array.isArray(educations.value) ? educations.value[0] : null;
         const loadedData: FullUserData = {
+          educationId: education?.id ? String(education.id) : '',
           name: userProfile?.name || '',
-          birthYear: userProfile?.birthYear ? String(userProfile.birthYear) : '',
-          academicStatus: education?.status || education?.academicStatus || '',
+          targetCompanyType: userProfile?.companyType || '',
+          targetJobRole: userProfile?.jobRole || '',
+          academicStatus: education?.status || education?.academicStatus || 'attending',
           schoolName: education?.schoolName || '',
           major: education?.major || '',
-          degree: education?.degree || '',
-          startDate: education?.startDate || '',
-          endDate: education?.endDate || '',
+          degree: education?.degree || 'bachelor',
+          startDate: normalizeMonthYear(education?.startDate || ''),
+          endDate: normalizeMonthYear(education?.endDate || ''),
           gpa: education?.gpa != null ? String(education.gpa) : '',
           maxGpa: education?.maxGpa != null ? String(education.maxGpa) : '',
           projects: projects.status === 'fulfilled' && Array.isArray(projects.value) ? projects.value.map(mapProjectFromApi) : [],
@@ -185,39 +213,93 @@ export const InfoManagement: React.FC = () => {
     };
 
     loadFromBackend();
-  }, [isLoggedIn, token, userProfile?.name, userProfile?.birthYear]);
+  }, [isLoggedIn, token, userProfile?.name]);
 
-  const persistData = async (newData: FullUserData) => {
-    setUserData(newData);
+  useEffect(() => {
+    setUserData((prev) => ({
+      ...prev,
+      name: userProfile?.name || prev.name,
+      targetCompanyType: userProfile?.companyType || prev.targetCompanyType,
+      targetJobRole: userProfile?.jobRole || prev.targetJobRole,
+    }));
+  }, [userProfile?.name, userProfile?.companyType, userProfile?.jobRole]);
 
-    if (!isLoggedIn || !token) return;
+  const handlePreferenceSave = async () => {
+    if (!userData.targetCompanyType) {
+      alert('희망 기업 유형을 선택해주세요.');
+      return;
+    }
 
-    const payload = toBackendPayload(newData);
-    const results = await Promise.allSettled([
-      portfolioApi.saveEducations(payload.educations),
-      portfolioApi.saveProjects(payload.projects),
-      portfolioApi.saveActivities(payload.activities),
-      portfolioApi.saveCertificates(payload.certificates),
-      portfolioApi.saveCareers(payload.careers),
-      newData.name ? userApi.saveOnboarding({
-        name: newData.name,
-        birthYear: parseInt(newData.birthYear) || 2000,
-        companyType: '',
-        jobRole: '',
-      }) : Promise.resolve(),
-    ]);
+    if (!userData.targetJobRole) {
+      alert('희망 직무를 선택해주세요.');
+      return;
+    }
 
-    const failed = results.find((result) => result.status === 'rejected');
-    if (failed) {
-      throw (failed as PromiseRejectedResult).reason;
+    try {
+      await userApi.updateMyInfo({
+        name: userData.name || userProfile?.name || '',
+        companyType: userData.targetCompanyType,
+        jobRole: userData.targetJobRole,
+      });
+      await refreshProfile();
+      showSavedNotice('희망 기업과 직무가 저장되었습니다.');
+    } catch (e) {
+      console.error('Failed to update target preferences', e);
+      alert('희망 기업/직무 저장 중 오류가 발생했습니다.');
     }
   };
 
   // Manual Save Button Handler (for text inputs in Education/Etc)
   const handleManualSave = async () => {
     try {
-      await persistData(userData);
-      alert('정보가 수정되었습니다.');
+      const requiredFields = [
+        { key: 'schoolName', label: '학교명', value: userData.schoolName },
+        { key: 'major', label: '전공', value: userData.major },
+        { key: 'degree', label: '학위', value: userData.degree },
+        { key: 'academicStatus', label: '상태', value: userData.academicStatus },
+        { key: 'startDate', label: '입학년월', value: userData.startDate },
+        { key: 'endDate', label: '졸업년월', value: userData.endDate },
+      ];
+
+      const missingField = requiredFields.find((field) => !String(field.value || '').trim());
+      if (missingField) {
+        alert(`${missingField.label}을(를) 입력해주세요.`);
+        return;
+      }
+
+      const datePattern = /^\d{4}([.-])\d{2}(\1\d{2})?$/;
+      if (!datePattern.test(userData.startDate.trim())) {
+        alert('입학년월은 YYYY.MM 또는 YYYY-MM 형식으로 입력해주세요.');
+        return;
+      }
+
+      if (!datePattern.test(userData.endDate.trim())) {
+        alert('졸업년월은 YYYY.MM 또는 YYYY-MM 형식으로 입력해주세요.');
+        return;
+      }
+
+      const educationPayload = {
+        schoolName: userData.schoolName.trim(),
+        major: userData.major.trim(),
+        degree: userData.degree,
+        status: userData.academicStatus,
+        startDate: userData.startDate.trim(),
+        endDate: userData.endDate.trim(),
+        gpa: userData.gpa ? parseFloat(userData.gpa) : null,
+        maxGpa: userData.maxGpa ? parseFloat(userData.maxGpa) : null,
+      };
+
+      if (userData.schoolName) {
+        const educationResult = userData.educationId
+          ? await portfolioApi.modifyEducation(Number(userData.educationId), educationPayload)
+          : await portfolioApi.addEducation(educationPayload);
+
+        if (!userData.educationId && educationResult?.id) {
+          setUserData((prev) => ({ ...prev, educationId: String(educationResult.id) }));
+        }
+      }
+
+      showSavedNotice('학력 정보가 저장되었습니다.');
     } catch (e) {
       console.error("Failed to sync user info", e);
       alert('정보 저장 중 오류가 발생했습니다.');
@@ -230,31 +312,300 @@ export const InfoManagement: React.FC = () => {
 
   // Flow Completion Handlers
   const handleProjectAdd = async (newProject: ProjectData) => {
-    const updated = { ...userData, projects: [...userData.projects, newProject] };
-    await persistData(updated);
-    setAddingMode(null);
+    try {
+      setAddStatus({ kind: 'saving', message: '프로젝트를 저장하고 있습니다...' });
+      const created = await portfolioApi.addProject({
+        name: newProject.projectName,
+        type: newProject.isTeam,
+        role: newProject.role,
+        techStack: Array.isArray(newProject.techStack) ? newProject.techStack.join(', ') : newProject.techStack,
+        description: newProject.description,
+        githubLink: newProject.links?.github || '',
+        demoLink: newProject.links?.demo || '',
+        result: newProject.outcome,
+        startDate: newProject.startDate,
+        endDate: newProject.endDate,
+      });
+      setUserData((prev) => ({
+        ...prev,
+        projects: [...prev.projects, mapProjectFromApi(created ?? newProject)],
+      }));
+      completeAddFlow('프로젝트가 저장되었습니다. 목록을 새로고침하고 있습니다...');
+    } catch (e) {
+      setAddStatus(null);
+      console.error('Failed to add project', e);
+      alert('프로젝트 추가 중 오류가 발생했습니다.');
+    }
   };
 
   const handleActivityAdd = async (newActivity: ActivityData) => {
-    const updated = { ...userData, activities: [...userData.activities, newActivity] };
-    await persistData(updated);
-    setAddingMode(null);
+    try {
+      setAddStatus({ kind: 'saving', message: '대외활동을 저장하고 있습니다...' });
+      const created = await portfolioApi.addActivity({
+        name: newActivity.activityName,
+        type: newActivity.activityType,
+        role: newActivity.role,
+        startMonth: newActivity.startDate,
+        endMonth: newActivity.endDate,
+        description: newActivity.description,
+        result: newActivity.achievement,
+      });
+      setUserData((prev) => ({
+        ...prev,
+        activities: [...prev.activities, mapActivityFromApi(created ?? newActivity)],
+      }));
+      completeAddFlow('대외활동이 저장되었습니다. 목록을 새로고침하고 있습니다...');
+    } catch (e) {
+      setAddStatus(null);
+      console.error('Failed to add activity', e);
+      alert('대외활동 추가 중 오류가 발생했습니다.');
+    }
   };
 
   const handleCertAdd = async (newCert: CertificateData) => {
-    const updated = { ...userData, certificates: [...userData.certificates, newCert] };
-    await persistData(updated);
-    setAddingMode(null);
+    try {
+      setAddStatus({ kind: 'saving', message: '자격증/어학 정보를 저장하고 있습니다...' });
+      const created = await portfolioApi.addCertificate({
+        name: newCert.name,
+        type: newCert.type,
+        issuer: newCert.issuer || '',
+        issueDate: newCert.date,
+        score: newCert.score,
+        certificateNumber: newCert.certId || '',
+      });
+      setUserData((prev) => ({
+        ...prev,
+        certificates: [...prev.certificates, mapCertificateFromApi(created ?? newCert)],
+      }));
+      completeAddFlow('자격증/어학 정보가 저장되었습니다. 목록을 새로고침하고 있습니다...');
+    } catch (e) {
+      setAddStatus(null);
+      console.error('Failed to add certificate', e);
+      alert('자격증 추가 중 오류가 발생했습니다.');
+    }
   };
 
   const handleCareerAdd = async (newCareer: CareerData) => {
-    const updated = { ...userData, careers: [...userData.careers, newCareer] };
-    await persistData(updated);
-    setAddingMode(null);
+    try {
+      setAddStatus({ kind: 'saving', message: '경력 정보를 저장하고 있습니다...' });
+      const created = await portfolioApi.addCareer({
+        type: newCareer.type,
+        company: newCareer.companyName,
+        position: newCareer.position || newCareer.department,
+        startDate: newCareer.startDate,
+        endDate: newCareer.endDate,
+        description: newCareer.description,
+      });
+      setUserData((prev) => ({
+        ...prev,
+        careers: [...prev.careers, mapCareerFromApi(created ?? newCareer)],
+      }));
+      completeAddFlow('경력 정보가 저장되었습니다. 목록을 새로고침하고 있습니다...');
+    } catch (e) {
+      setAddStatus(null);
+      console.error('Failed to add career', e);
+      alert('경력 추가 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleDeleteProject = async (idx: number) => {
+    const target = userData.projects[idx];
+    if (!target) return;
+
+    try {
+      if (target.id) {
+        await portfolioApi.deleteProject(Number(target.id));
+        setUserData((prev) => ({ ...prev, projects: prev.projects.filter((_, i) => i !== idx) }));
+        return;
+      }
+
+      setUserData((prev) => ({ ...prev, projects: prev.projects.filter((_, i) => i !== idx) }));
+    } catch (e) {
+      console.error('Failed to delete project', e);
+      alert('프로젝트 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleDeleteActivity = async (idx: number) => {
+    const target = userData.activities[idx];
+    if (!target) return;
+
+    try {
+      if (target.id) {
+        await portfolioApi.deleteActivity(Number(target.id));
+        setUserData((prev) => ({ ...prev, activities: prev.activities.filter((_, i) => i !== idx) }));
+        return;
+      }
+
+      setUserData((prev) => ({ ...prev, activities: prev.activities.filter((_, i) => i !== idx) }));
+    } catch (e) {
+      console.error('Failed to delete activity', e);
+      alert('대외활동 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleDeleteCertificate = async (idx: number) => {
+    const target = userData.certificates[idx];
+    if (!target) return;
+
+    try {
+      if (target.id) {
+        await portfolioApi.deleteCertificate(Number(target.id));
+        setUserData((prev) => ({ ...prev, certificates: prev.certificates.filter((_, i) => i !== idx) }));
+        return;
+      }
+
+      setUserData((prev) => ({ ...prev, certificates: prev.certificates.filter((_, i) => i !== idx) }));
+    } catch (e) {
+      console.error('Failed to delete certificate', e);
+      alert('자격증 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleDeleteCareer = async (idx: number) => {
+    const target = userData.careers[idx];
+    if (!target) return;
+
+    try {
+      if (target.id) {
+        await portfolioApi.deleteCareer(Number(target.id));
+        setUserData((prev) => ({ ...prev, careers: prev.careers.filter((_, i) => i !== idx) }));
+        return;
+      }
+
+      setUserData((prev) => ({ ...prev, careers: prev.careers.filter((_, i) => i !== idx) }));
+    } catch (e) {
+      console.error('Failed to delete career', e);
+      alert('경력 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  const openEditModal = (section: EditableSection, index: number) => {
+    if (section === 'projects') {
+      setEditModal({ section, index, data: { ...userData.projects[index] } });
+      return;
+    }
+    if (section === 'activities') {
+      setEditModal({ section, index, data: { ...userData.activities[index] } });
+      return;
+    }
+    if (section === 'certificates') {
+      setEditModal({ section, index, data: { ...userData.certificates[index] } });
+      return;
+    }
+    setEditModal({ section: 'career', index, data: { ...userData.careers[index] } });
+  };
+
+  const updateEditModal = (patch: any) => {
+    setEditModal((prev) => prev ? { ...prev, data: { ...prev.data, ...patch } } as EditModalState : prev);
+  };
+
+  const handleEditSave = async () => {
+    if (!editModal) return;
+
+    try {
+      if (editModal.section === 'projects') {
+        const target = editModal.data;
+        await portfolioApi.modifyProject(Number(target.id), {
+          name: target.projectName,
+          type: target.isTeam,
+          role: target.role,
+          techStack: Array.isArray(target.techStack) ? target.techStack.join(', ') : target.techStack,
+          description: target.description,
+          githubLink: target.links?.github || '',
+          demoLink: target.links?.demo || '',
+          result: target.outcome,
+          startDate: target.startDate,
+          endDate: target.endDate,
+        });
+        setUserData((prev) => ({
+          ...prev,
+          projects: prev.projects.map((item, idx) => idx === editModal.index ? target : item),
+        }));
+        setEditModal(null);
+        showSavedNotice('프로젝트 정보가 수정되었습니다.');
+        return;
+      }
+
+      if (editModal.section === 'activities') {
+        const target = editModal.data;
+        await portfolioApi.modifyActivity(Number(target.id), {
+          name: target.activityName,
+          type: target.activityType,
+          role: target.role,
+          startMonth: target.startDate,
+          endMonth: target.endDate,
+          description: target.description,
+          result: target.achievement,
+        });
+        setUserData((prev) => ({
+          ...prev,
+          activities: prev.activities.map((item, idx) => idx === editModal.index ? target : item),
+        }));
+        setEditModal(null);
+        showSavedNotice('대외활동 정보가 수정되었습니다.');
+        return;
+      }
+
+      if (editModal.section === 'certificates') {
+        const target = editModal.data;
+        await portfolioApi.modifyCertificate(Number(target.id), {
+          name: target.name,
+          type: target.type,
+          issuer: target.issuer || '',
+          issueDate: target.date,
+          score: target.score,
+          certificateNumber: target.certId || '',
+        });
+        setUserData((prev) => ({
+          ...prev,
+          certificates: prev.certificates.map((item, idx) => idx === editModal.index ? target : item),
+        }));
+        setEditModal(null);
+        showSavedNotice('자격증/어학 정보가 수정되었습니다.');
+        return;
+      }
+
+      const target = editModal.data;
+      await portfolioApi.modifyCareer(Number(target.id), {
+        type: target.type,
+        company: target.companyName,
+        position: target.position || target.department,
+        startDate: target.startDate,
+        endDate: target.endDate,
+        description: target.description,
+      });
+      setUserData((prev) => ({
+        ...prev,
+        careers: prev.careers.map((item, idx) => idx === editModal.index ? target : item),
+      }));
+      setEditModal(null);
+      showSavedNotice('경력 정보가 수정되었습니다.');
+    } catch (e) {
+      console.error('Failed to update item', e);
+      alert('정보 수정 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleRerunAnalysis = async () => {
+    setIsRerunningAnalysis(true);
+    try {
+      if (onRerunAnalysis) {
+        await onRerunAnalysis();
+      } else {
+        await analyticsApi.analyzePortfolio();
+      }
+    } catch (e) {
+      console.error('Failed to rerun analysis', e);
+      alert('AI 재진단 중 오류가 발생했습니다.');
+    } finally {
+      setIsRerunningAnalysis(false);
+    }
   };
 
 
   const categories = [
+    { id: 'preferences', label: '희망 기업/직무', icon: '🎯' },
     { id: 'education', label: '학력 정보', icon: '🎓' },
     { id: 'projects', label: '프로젝트', icon: '💻' },
     { id: 'activities', label: '대외활동', icon: '🤝' },
@@ -264,6 +615,67 @@ export const InfoManagement: React.FC = () => {
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'preferences':
+        return (
+          <div className="max-w-2xl mx-auto py-4 animate-fade-in-up">
+            <div className="text-center mb-10">
+              <div className="w-16 h-16 bg-cyan-50 text-cyan-600 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4 shadow-sm border border-cyan-100">
+                🎯
+              </div>
+              <h3 className="text-2xl font-extrabold text-gray-900">희망 기업/직무</h3>
+              <p className="text-gray-500 text-sm mt-1">재진단 기준이 되는 목표 기업 유형과 직무를 관리하세요.</p>
+            </div>
+
+            <div className="bg-white/50 p-8 rounded-3xl border border-white/60 shadow-sm space-y-8">
+              <div className="flex flex-col gap-2">
+                <label className="text-gray-400 text-xs font-bold uppercase tracking-wider ml-1">희망 기업 유형</label>
+                <select
+                  className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:border-cyan-500 shadow-sm"
+                  value={userData.targetCompanyType}
+                  onChange={(e) => {
+                    const nextCompanyType = e.target.value;
+                    const nextRoles = jobRoles[nextCompanyType] || [];
+                    setUserData((prev) => ({
+                      ...prev,
+                      targetCompanyType: nextCompanyType,
+                      targetJobRole: nextRoles.includes(prev.targetJobRole) ? prev.targetJobRole : '',
+                    }));
+                  }}
+                >
+                  <option value="">희망 기업 유형을 선택해주세요</option>
+                  {companyTypes.map((companyType) => (
+                    <option key={companyType} value={companyType}>{companyType}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-gray-400 text-xs font-bold uppercase tracking-wider ml-1">희망 직무</label>
+                <select
+                  className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:border-cyan-500 shadow-sm disabled:bg-gray-50 disabled:text-gray-400"
+                  value={userData.targetJobRole}
+                  onChange={(e) => handleChange('targetJobRole', e.target.value)}
+                  disabled={!userData.targetCompanyType}
+                >
+                  <option value="">{userData.targetCompanyType ? '희망 직무를 선택해주세요' : '먼저 희망 기업 유형을 선택해주세요'}</option>
+                  {(jobRoles[userData.targetCompanyType] || []).map((role) => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="rounded-2xl border border-cyan-100 bg-cyan-50/70 px-5 py-4">
+                <p className="text-sm font-semibold text-cyan-900">이곳에서 바꾼 목표는 아래 `다시 진단 돌리기` 버튼과 바로 이어집니다.</p>
+                <p className="text-sm text-cyan-700 mt-1">원하는 기업 유형과 직무를 먼저 맞춘 뒤 재진단하면 리포트 방향이 더 자연스럽게 바뀝니다.</p>
+              </div>
+            </div>
+
+            <div className="flex justify-center pt-8">
+              <Button variant="primary" onClick={handlePreferenceSave} className="w-full max-w-sm py-4 rounded-xl shadow-lg shadow-gray-200">저장하기</Button>
+            </div>
+          </div>
+        );
+
       case 'education':
         return (
           <div className="max-w-2xl mx-auto py-4 animate-fade-in-up">
@@ -304,8 +716,8 @@ export const InfoManagement: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <Input label="입학년월" placeholder="YYYY.MM" value={userData.startDate} onChange={(e) => handleChange('startDate', e.target.value)} className="text-center" />
-                <Input label="졸업년월" placeholder="YYYY.MM" value={userData.endDate} onChange={(e) => handleChange('endDate', e.target.value)} className="text-center" />
+                <MonthYearPicker label="입학년월" value={userData.startDate} onChange={(value) => handleChange('startDate', value)} placeholder="YYYY.MM" />
+                <MonthYearPicker label="졸업년월" value={userData.endDate} onChange={(value) => handleChange('endDate', value)} placeholder="YYYY.MM" />
               </div>
 
               <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
@@ -356,11 +768,8 @@ export const InfoManagement: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="p-2 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
-                        <button className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" onClick={() => {
-                          const newProjects = userData.projects.filter((_, i) => i !== idx);
-                          persistData({ ...userData, projects: newProjects });
-                        }}><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                        <button className="p-2 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg transition-colors" onClick={() => openEditModal('projects', idx)}><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
+                        <button className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" onClick={() => handleDeleteProject(idx)}><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                       </div>
                     </div>
 
@@ -416,11 +825,8 @@ export const InfoManagement: React.FC = () => {
                         <span className="text-xs font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md mt-1 inline-block">{act.role}</span>
                       </div>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
-                        <button className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" onClick={() => {
-                          const newActs = userData.activities.filter((_, i) => i !== idx);
-                          persistData({ ...userData, activities: newActs });
-                        }}><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                        <button className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors" onClick={() => openEditModal('activities', idx)}><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
+                        <button className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" onClick={() => handleDeleteActivity(idx)}><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                       </div>
                     </div>
                     <p className="text-sm text-gray-600 mt-3 leading-relaxed border-t border-gray-50 pt-3">{act.description}</p>
@@ -475,10 +881,10 @@ export const InfoManagement: React.FC = () => {
                       </div>
                     </div>
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-2 text-gray-300 hover:text-red-500 transition-colors" onClick={() => {
-                        const newCerts = userData.certificates.filter((_, i) => i !== idx);
-                        persistData({ ...userData, certificates: newCerts });
-                      }}>
+                      <button className="p-2 text-gray-300 hover:text-cyan-600 transition-colors" onClick={() => openEditModal('certificates', idx)}>
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                      </button>
+                      <button className="p-2 text-gray-300 hover:text-red-500 transition-colors" onClick={() => handleDeleteCertificate(idx)}>
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                       </button>
                     </div>
@@ -527,11 +933,8 @@ export const InfoManagement: React.FC = () => {
 
                     <div className="flex-1 bg-white border border-gray-200 rounded-2xl p-6 hover:border-green-300 hover:shadow-lg hover:shadow-green-500/5 transition-all mb-4 relative">
                       <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                        <button className="text-xs text-gray-400 hover:text-green-600">수정</button>
-                        <button className="text-xs text-gray-400 hover:text-red-500" onClick={() => {
-                          const newCar = userData.careers.filter((_, i) => i !== idx);
-                          persistData({ ...userData, careers: newCar });
-                        }}>삭제</button>
+                        <button className="text-xs text-gray-400 hover:text-green-600" onClick={() => openEditModal('career', idx)}>수정</button>
+                        <button className="text-xs text-gray-400 hover:text-red-500" onClick={() => handleDeleteCareer(idx)}>삭제</button>
                       </div>
 
                       <div className="mb-1">
@@ -581,6 +984,137 @@ export const InfoManagement: React.FC = () => {
         </div>
       )}
 
+      {saveNotice && (
+        <div className="max-w-3xl mx-auto px-6 pb-6">
+          <GlassCard className="p-4 text-center text-sm font-bold text-emerald-700 border border-emerald-100 bg-emerald-50/80">
+            {saveNotice}
+          </GlassCard>
+        </div>
+      )}
+
+      {editModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setEditModal(null)} />
+          <div className="relative z-10 w-full max-w-3xl max-h-[85vh] overflow-y-auto">
+            <GlassCard className="p-8 border border-white/60 shadow-2xl">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-extrabold text-gray-900">정보 수정</h3>
+                <button onClick={() => setEditModal(null)} className="text-gray-400 hover:text-gray-700">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+
+              {editModal.section === 'projects' && (
+                <div className="space-y-5">
+                  <Input label="프로젝트명" value={editModal.data.projectName} onChange={(e) => updateEditModal({ projectName: e.target.value })} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-gray-500 text-xs font-bold uppercase tracking-wider ml-1">프로젝트 유형</label>
+                      <select className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3" value={editModal.data.isTeam} onChange={(e) => updateEditModal({ isTeam: e.target.value })}>
+                        <option value="individual">개인 프로젝트</option>
+                        <option value="team">팀 프로젝트</option>
+                      </select>
+                    </div>
+                    <Input label="역할" value={editModal.data.role} onChange={(e) => updateEditModal({ role: e.target.value })} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <MonthYearPicker label="시작일" value={editModal.data.startDate} onChange={(value) => updateEditModal({ startDate: value })} placeholder="YYYY.MM" />
+                    <MonthYearPicker label="종료일" value={editModal.data.endDate} onChange={(value) => updateEditModal({ endDate: value })} placeholder="YYYY.MM" />
+                  </div>
+                  <Input label="기술 스택" value={Array.isArray(editModal.data.techStack) ? editModal.data.techStack.join(', ') : ''} onChange={(e) => updateEditModal({ techStack: e.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} placeholder="React, TypeScript, Spring" />
+                  <Input label="GitHub 링크" value={editModal.data.links?.github || ''} onChange={(e) => updateEditModal({ links: { ...editModal.data.links, github: e.target.value } })} />
+                  <Input label="데모 링크" value={editModal.data.links?.demo || ''} onChange={(e) => updateEditModal({ links: { ...editModal.data.links, demo: e.target.value } })} />
+                  <div className="flex flex-col gap-2">
+                    <label className="text-gray-500 text-xs font-bold uppercase tracking-wider ml-1">설명</label>
+                    <textarea className="w-full min-h-[120px] bg-white border border-gray-200 rounded-xl px-4 py-3" value={editModal.data.description} onChange={(e) => updateEditModal({ description: e.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-gray-500 text-xs font-bold uppercase tracking-wider ml-1">성과</label>
+                    <textarea className="w-full min-h-[100px] bg-white border border-gray-200 rounded-xl px-4 py-3" value={editModal.data.outcome} onChange={(e) => updateEditModal({ outcome: e.target.value })} />
+                  </div>
+                </div>
+              )}
+
+              {editModal.section === 'activities' && (
+                <div className="space-y-5">
+                  <Input label="활동명" value={editModal.data.activityName} onChange={(e) => updateEditModal({ activityName: e.target.value })} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-gray-500 text-xs font-bold uppercase tracking-wider ml-1">활동 유형</label>
+                      <select className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3" value={editModal.data.activityType} onChange={(e) => updateEditModal({ activityType: e.target.value })}>
+                        <option value="club">동아리/학회</option>
+                        <option value="contest">해커톤/공모전</option>
+                        <option value="education">교육/부트캠프</option>
+                        <option value="volunteer">서포터즈/봉사</option>
+                        <option value="other">기타</option>
+                      </select>
+                    </div>
+                    <Input label="역할" value={editModal.data.role} onChange={(e) => updateEditModal({ role: e.target.value })} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <MonthYearPicker label="시작일" value={editModal.data.startDate} onChange={(value) => updateEditModal({ startDate: value })} placeholder="YYYY.MM" />
+                    <MonthYearPicker label="종료일" value={editModal.data.endDate} onChange={(value) => updateEditModal({ endDate: value })} placeholder="YYYY.MM" />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-gray-500 text-xs font-bold uppercase tracking-wider ml-1">설명</label>
+                    <textarea className="w-full min-h-[120px] bg-white border border-gray-200 rounded-xl px-4 py-3" value={editModal.data.description} onChange={(e) => updateEditModal({ description: e.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-gray-500 text-xs font-bold uppercase tracking-wider ml-1">성과</label>
+                    <textarea className="w-full min-h-[100px] bg-white border border-gray-200 rounded-xl px-4 py-3" value={editModal.data.achievement} onChange={(e) => updateEditModal({ achievement: e.target.value })} />
+                  </div>
+                </div>
+              )}
+
+              {editModal.section === 'certificates' && (
+                <div className="space-y-5">
+                  <div className="flex flex-col gap-2">
+                    <label className="text-gray-500 text-xs font-bold uppercase tracking-wider ml-1">유형</label>
+                    <select className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3" value={editModal.data.type} onChange={(e) => updateEditModal({ type: e.target.value })}>
+                      <option value="language">어학 자격증</option>
+                      <option value="general">일반 자격증</option>
+                    </select>
+                  </div>
+                  <Input label="명칭" value={editModal.data.name} onChange={(e) => updateEditModal({ name: e.target.value })} />
+                  <Input label="발급 기관" value={editModal.data.issuer || ''} onChange={(e) => updateEditModal({ issuer: e.target.value })} />
+                  <DatePicker label="취득일" value={editModal.data.date} onChange={(value) => updateEditModal({ date: value })} placeholder="YYYY.MM.DD" />
+                  <Input label="점수/등급" value={editModal.data.score} onChange={(e) => updateEditModal({ score: e.target.value })} />
+                  <Input label="자격증 번호" value={editModal.data.certId || ''} onChange={(e) => updateEditModal({ certId: e.target.value })} />
+                </div>
+              )}
+
+              {editModal.section === 'career' && (
+                <div className="space-y-5">
+                  <div className="flex flex-col gap-2">
+                    <label className="text-gray-500 text-xs font-bold uppercase tracking-wider ml-1">경력 유형</label>
+                    <select className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3" value={editModal.data.type} onChange={(e) => updateEditModal({ type: e.target.value })}>
+                      <option value="intern">인턴십</option>
+                      <option value="career">정규직/계약직 경력</option>
+                    </select>
+                  </div>
+                  <Input label="회사명" value={editModal.data.companyName} onChange={(e) => updateEditModal({ companyName: e.target.value })} />
+                  <Input label="부서/직무" value={editModal.data.department} onChange={(e) => updateEditModal({ department: e.target.value })} />
+                  <Input label="직급/직책" value={editModal.data.position || ''} onChange={(e) => updateEditModal({ position: e.target.value })} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <MonthYearPicker label="입사 년월" value={editModal.data.startDate} onChange={(value) => updateEditModal({ startDate: value })} placeholder="YYYY.MM" />
+                    <MonthYearPicker label="퇴사 년월" value={editModal.data.endDate} onChange={(value) => updateEditModal({ endDate: value })} placeholder="YYYY.MM" />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-gray-500 text-xs font-bold uppercase tracking-wider ml-1">설명</label>
+                    <textarea className="w-full min-h-[120px] bg-white border border-gray-200 rounded-xl px-4 py-3" value={editModal.data.description} onChange={(e) => updateEditModal({ description: e.target.value })} />
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-8 flex justify-end gap-3">
+                <Button variant="secondary" onClick={() => setEditModal(null)} className="px-5 py-3 text-sm font-bold">취소</Button>
+                <Button variant="primary" onClick={handleEditSave} className="px-5 py-3 text-sm font-bold">저장</Button>
+              </div>
+            </GlassCard>
+          </div>
+        </div>
+      )}
+
       <div className="w-full max-w-[1600px] mx-auto px-6 grid grid-cols-1 lg:grid-cols-[16rem_1fr] xl:grid-cols-[1fr_800px_1fr] gap-8 relative items-start">
 
         {/* Sidebar (Desktop) */}
@@ -625,7 +1159,17 @@ export const InfoManagement: React.FC = () => {
 
         {/* Content Area */}
         <div className="w-full xl:col-start-2 min-w-0">
-          {addingMode ? (
+          {addingMode && addStatus ? (
+            <GlassCard className="p-8 md:p-12 border border-white/60 min-h-[500px] shadow-xl shadow-gray-200/40 flex flex-col items-center justify-center text-center animate-fade-in-up">
+              <div className={`w-16 h-16 rounded-full mb-6 flex items-center justify-center text-2xl ${addStatus.kind === 'saving' ? 'border-4 border-cyan-500 border-t-transparent animate-spin' : 'bg-emerald-100 text-emerald-600'}`}>
+                {addStatus.kind === 'done' ? '✓' : ''}
+              </div>
+              <h3 className="text-2xl font-extrabold text-gray-900 mb-3">
+                {addStatus.kind === 'saving' ? '저장 중입니다' : '저장이 완료되었습니다'}
+              </h3>
+              <p className="text-gray-500 text-base leading-relaxed">{addStatus.message}</p>
+            </GlassCard>
+          ) : addingMode ? (
             <div className="animate-fade-in-up">
               {addingMode === 'projects' && <ProjectFlow onComplete={handleProjectAdd} onBack={() => setAddingMode(null)} />}
               {addingMode === 'activities' && <ActivityFlow onComplete={handleActivityAdd} onBack={() => setAddingMode(null)} />}
@@ -633,9 +1177,27 @@ export const InfoManagement: React.FC = () => {
               {addingMode === 'career' && <CareerFlow onComplete={handleCareerAdd} onBack={() => setAddingMode(null)} />}
             </div>
           ) : (
-            <GlassCard className="p-8 md:p-12 border border-white/60 min-h-[500px] shadow-xl shadow-gray-200/40">
-              {renderContent()}
-            </GlassCard>
+            <div className="space-y-6">
+              <GlassCard className="p-8 md:p-12 border border-white/60 min-h-[500px] shadow-xl shadow-gray-200/40">
+                {renderContent()}
+              </GlassCard>
+              <GlassCard className="p-6 border border-white/60 shadow-lg shadow-gray-200/30">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">정보 수정 후 다시 진단</h3>
+                    <p className="text-sm text-gray-500 mt-1">최신 정보 기준으로 AI 커리어 분석 리포트를 다시 생성합니다.</p>
+                  </div>
+                  <Button
+                    variant="neon"
+                    onClick={handleRerunAnalysis}
+                    className="px-6 py-3 text-sm font-bold"
+                    disabled={isRerunningAnalysis}
+                  >
+                    {isRerunningAnalysis ? '재진단 중...' : '다시 진단 돌리기'}
+                  </Button>
+                </div>
+              </GlassCard>
+            </div>
           )}
         </div>
 

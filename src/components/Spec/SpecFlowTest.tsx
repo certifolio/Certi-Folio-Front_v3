@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { GlassCard } from '../UI/GlassCard';
 import { Button } from '../UI/Button';
+import { Input } from '../UI/Input';
+import { MonthYearPicker } from '../UI/MonthYearPicker';
+import { DatePicker } from '../UI/DatePicker';
 import { BasicInfoFlow } from './BasicInfoFlow';
 import { EducationFlow, EducationData } from './EducationFlow';
 import { ProjectFlow, ProjectData } from './ProjectFlow';
@@ -11,6 +14,7 @@ import { SpecReport } from './SpecReport';
 import { portfolioApi, userApi } from '../../api/userApi';
 import { analyticsApi, type AnalyticsResult } from '../../api/analyticsApi';
 import { useAuth } from '../../contexts/AuthContext';
+import { useApp } from '../../contexts/AppContext';
 
 // Define the full structure of the data we are collecting
 interface FullUserData {
@@ -19,7 +23,6 @@ interface FullUserData {
   targetJobRole: string;
   // Basic Info
   name: string;
-  birthYear: string;
   // Education
   academicStatus: string;
   schoolName: string;
@@ -124,8 +127,23 @@ const mapCareerFromApi = (career: any): CareerData => ({
   description: career.description || '',
 });
 
+const LabeledTextarea = ({ label, ...props }: any) => (
+  <div className="flex flex-col gap-2 w-full">
+    {label && <label className="text-gray-500 text-xs font-bold uppercase tracking-wider ml-1">{label}</label>}
+    <textarea {...props} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900 placeholder-gray-400 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 transition-all duration-300 shadow-sm min-h-[100px] resize-y leading-relaxed" />
+  </div>
+);
+
+const LabeledSelect = ({ label, ...props }: any) => (
+  <div className="flex flex-col gap-2 w-full">
+    {label && <label className="text-gray-500 text-xs font-bold uppercase tracking-wider ml-1">{label}</label>}
+    <select {...props} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 transition-all duration-300 shadow-sm" />
+  </div>
+);
+
 export const SpecFlowTest: React.FC<SpecFlowTestProps> = ({ onAnalysisComplete }) => {
   const { isLoggedIn, token, userProfile, refreshProfile } = useAuth();
+  const { navigate } = useApp();
   // State
   const [stage, setStage] = useState<FlowStage>('intro');
   const [isAnimating, setIsAnimating] = useState(false);
@@ -142,7 +160,6 @@ export const SpecFlowTest: React.FC<SpecFlowTestProps> = ({ onAnalysisComplete }
     targetCompanyType: '',
     targetJobRole: '',
     name: userProfile?.name || '사용자',
-    birthYear: '',
     academicStatus: '',
     schoolName: '',
     major: '',
@@ -324,7 +341,6 @@ export const SpecFlowTest: React.FC<SpecFlowTestProps> = ({ onAnalysisComplete }
       try {
         await userApi.saveOnboarding({
           name: data.name,
-          birthYear: parseInt(data.birthYear) || 2000,
           companyType: data.targetCompanyType || '',
           jobRole: data.targetJobRole || '',
         });
@@ -456,8 +472,6 @@ export const SpecFlowTest: React.FC<SpecFlowTestProps> = ({ onAnalysisComplete }
     }));
   };
 
-  const reviewInputClass = "w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm text-gray-800 focus:outline-none focus:border-cyan-500";
-  const reviewTextAreaClass = `${reviewInputClass} min-h-24 resize-y leading-relaxed`;
 
   const handleReset = () => {
     window.location.href = '/';
@@ -479,7 +493,7 @@ export const SpecFlowTest: React.FC<SpecFlowTestProps> = ({ onAnalysisComplete }
   // Render logic for success screen -> Now SpecReport
   if (stage === 'finished') {
     return (
-      <SpecReport analyticsData={analyticsResult} onGoToDashboard={() => window.location.href = '/'} />
+      <SpecReport analyticsData={analyticsResult} onGoToDashboard={() => navigate('dashboard')} />
     );
   }
 
@@ -533,7 +547,7 @@ export const SpecFlowTest: React.FC<SpecFlowTestProps> = ({ onAnalysisComplete }
       </div>
 
       {/* 2. Basic Info Flow (Includes Target Setting now) */}
-      {stage === 'basic' && <BasicInfoFlow initialData={{ name: userData.name, birthYear: userData.birthYear, targetCompanyType: userData.targetCompanyType, targetJobRole: userData.targetJobRole }} onComplete={handleBasicInfoComplete} />}
+      {stage === 'basic' && <BasicInfoFlow initialData={{ name: userData.name, targetCompanyType: userData.targetCompanyType, targetJobRole: userData.targetJobRole }} onComplete={handleBasicInfoComplete} />}
 
       {/* Prompt: Add Education? */}
       {stage === 'prompt_edu' && (
@@ -676,155 +690,260 @@ export const SpecFlowTest: React.FC<SpecFlowTestProps> = ({ onAnalysisComplete }
 
       {stage === 'review' && (
         <div className="w-full animate-fade-in-up">
-          <GlassCard className="w-full p-8 md:p-10 shadow-2xl border-white/80">
-            <div className="text-center mb-10">
-              <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-3">입력 내용 검토</h2>
-              <p className="text-gray-500">AI 분석 전에 입력한 내용을 확인하고 필요한 부분을 수정해주세요.</p>
+          <GlassCard className="w-full p-8 md:p-12 shadow-2xl border-white/80">
+            <div className="text-center mb-12">
+              <div className="w-20 h-20 bg-gradient-to-tr from-cyan-500 to-blue-600 text-white rounded-3xl flex items-center justify-center text-4xl mx-auto mb-6 shadow-2xl shadow-cyan-500/40">
+                🔍
+              </div>
+              <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-4 tracking-tight">입력 내용 검토</h2>
+              <p className="text-lg text-gray-500 max-w-xl mx-auto">AI 분석을 시작하기 전에 입력하신 모든 정보를 확인해주세요.<br/>수정이 필요한 부분은 바로 편집할 수 있습니다.</p>
             </div>
 
             <div className="space-y-8">
-              <section className="bg-white/70 border border-gray-100 rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-gray-900">기본 정보</h3>
-                  <button onClick={() => setStage('basic')} className="text-xs font-bold text-cyan-600 hover:underline">다시 입력</button>
+              {/* 기본 정보 */}
+              <section className="bg-white/80 border border-gray-100 rounded-3xl p-8 shadow-sm">
+                <div className="flex items-center justify-between mb-8 border-b border-gray-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-cyan-50 text-cyan-500 rounded-xl flex items-center justify-center text-xl shadow-inner">👤</div>
+                    <h3 className="text-2xl font-extrabold text-gray-900">기본 정보</h3>
+                  </div>
+                  <button onClick={() => setStage('basic')} className="px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl text-sm font-bold shadow-sm hover:bg-gray-50 hover:text-cyan-600 transition-all">다시 입력</button>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <input className={reviewInputClass} value={userData.name} onChange={(e) => updateReviewField('name', e.target.value)} placeholder="이름" />
-                  <input className={reviewInputClass} value={userData.targetCompanyType} onChange={(e) => updateReviewField('targetCompanyType', e.target.value)} placeholder="희망 회사 유형" />
-                  <input className={reviewInputClass} value={userData.targetJobRole} onChange={(e) => updateReviewField('targetJobRole', e.target.value)} placeholder="희망 직무" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <Input label="이름" value={userData.name} onChange={(e) => updateReviewField('name', e.target.value)} placeholder="홍길동" />
+                  <LabeledSelect label="희망 회사 유형" value={userData.targetCompanyType} onChange={(e: any) => updateReviewField('targetCompanyType', e.target.value)}>
+                    <option value="">유형 선택</option>
+                    <option value="대기업">대기업</option>
+                    <option value="중견기업">중견기업</option>
+                    <option value="스타트업">스타트업</option>
+                    <option value="공기업/공공기관">공기업/공공기관</option>
+                    <option value="외국계">외국계</option>
+                    <option value="기타">기타</option>
+                  </LabeledSelect>
+                  <LabeledSelect label="희망 직무" value={userData.targetJobRole} onChange={(e: any) => updateReviewField('targetJobRole', e.target.value)}>
+                    <option value="">직무 선택</option>
+                    <option value="프론트엔드 개발">프론트엔드 개발</option>
+                    <option value="백엔드 개발">백엔드 개발</option>
+                    <option value="풀스택 개발">풀스택 개발</option>
+                    <option value="모바일 앱 개발">모바일 앱 개발</option>
+                    <option value="인프라/서버">인프라/서버</option>
+                    <option value="데이터/AI">데이터/AI</option>
+                    <option value="기획/PM">기획/PM</option>
+                    <option value="디자인">디자인</option>
+                    <option value="기타">기타</option>
+                  </LabeledSelect>
                 </div>
               </section>
 
-              <section className="bg-white/70 border border-gray-100 rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-gray-900">학력</h3>
-                  <button onClick={() => setStage('education')} className="text-xs font-bold text-cyan-600 hover:underline">다시 입력</button>
+              {/* 학력 정보 */}
+              <section className="bg-white/80 border border-gray-100 rounded-3xl p-8 shadow-sm">
+                <div className="flex items-center justify-between mb-8 border-b border-gray-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-50 text-blue-500 rounded-xl flex items-center justify-center text-xl shadow-inner">🎓</div>
+                    <h3 className="text-2xl font-extrabold text-gray-900">학력 정보</h3>
+                  </div>
+                  <button onClick={() => setStage('education')} className="px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl text-sm font-bold shadow-sm hover:bg-gray-50 hover:text-blue-600 transition-all">다시 입력</button>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <input className={reviewInputClass} value={userData.schoolName} onChange={(e) => updateReviewField('schoolName', e.target.value)} placeholder="학교명" />
-                  <input className={reviewInputClass} value={userData.major} onChange={(e) => updateReviewField('major', e.target.value)} placeholder="전공" />
-                  <select className={reviewInputClass} value={userData.degree} onChange={(e) => updateReviewField('degree', e.target.value)}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <Input label="학교명" value={userData.schoolName} onChange={(e) => updateReviewField('schoolName', e.target.value)} placeholder="한국대학교" />
+                  <Input label="전공" value={userData.major} onChange={(e) => updateReviewField('major', e.target.value)} placeholder="컴퓨터공학과" />
+                  <LabeledSelect label="학위" value={userData.degree} onChange={(e: any) => updateReviewField('degree', e.target.value)}>
                     <option value="bachelor">학사</option>
                     <option value="associate">전문학사</option>
                     <option value="master">석사</option>
                     <option value="doctor">박사</option>
-                  </select>
-                  <select className={reviewInputClass} value={userData.academicStatus} onChange={(e) => updateReviewField('academicStatus', e.target.value)}>
+                  </LabeledSelect>
+                  <LabeledSelect label="상태" value={userData.academicStatus} onChange={(e: any) => updateReviewField('academicStatus', e.target.value)}>
                     <option value="">상태 선택</option>
-                    <option value="attending">재학</option>
+                    <option value="attending">재학 중</option>
                     <option value="graduated">졸업</option>
                     <option value="pending">졸업 예정</option>
                     <option value="leave">휴학</option>
-                  </select>
-                  <input className={reviewInputClass} value={userData.startDate} onChange={(e) => updateReviewField('startDate', e.target.value)} placeholder="입학년월" />
-                  <input className={reviewInputClass} value={userData.endDate} onChange={(e) => updateReviewField('endDate', e.target.value)} placeholder="졸업년월" />
-                  <input className={reviewInputClass} value={userData.gpa} onChange={(e) => updateReviewField('gpa', e.target.value)} placeholder="평점" />
-                  <input className={reviewInputClass} value={userData.maxGpa} onChange={(e) => updateReviewField('maxGpa', e.target.value)} placeholder="만점" />
+                  </LabeledSelect>
+                  <MonthYearPicker label="입학년월" value={userData.startDate} onChange={(val) => updateReviewField('startDate', val)} placeholder="YYYY.MM" />
+                  <MonthYearPicker label="졸업년월" value={userData.endDate} onChange={(val) => updateReviewField('endDate', val)} placeholder="YYYY.MM" />
+                  
+                  <div className="md:col-span-2 bg-gray-50/50 p-6 rounded-2xl border border-gray-100">
+                    <label className="text-gray-500 text-xs font-bold uppercase tracking-wider block text-center mb-3">전체 평점 (GPA)</label>
+                    <div className="flex items-center justify-center gap-4">
+                      <input value={userData.gpa} onChange={(e) => updateReviewField('gpa', e.target.value)} placeholder="0.0" className="text-center text-xl font-bold w-32 bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 shadow-sm" />
+                      <span className="text-3xl text-gray-300">/</span>
+                      <input value={userData.maxGpa} onChange={(e) => updateReviewField('maxGpa', e.target.value)} placeholder="4.5" className="text-center text-xl font-bold w-32 bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 shadow-sm" />
+                    </div>
+                  </div>
                 </div>
               </section>
 
-              <section className="bg-white/70 border border-gray-100 rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-gray-900">프로젝트</h3>
-                  <button onClick={() => setStage('project')} className="text-xs font-bold text-cyan-600 hover:underline">추가 입력</button>
+              {/* 프로젝트 */}
+              <section className="bg-white/80 border border-gray-100 rounded-3xl p-8 shadow-sm">
+                <div className="flex items-center justify-between mb-8 border-b border-gray-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-purple-50 text-purple-500 rounded-xl flex items-center justify-center text-xl shadow-inner">💻</div>
+                    <h3 className="text-2xl font-extrabold text-gray-900">프로젝트</h3>
+                  </div>
+                  <button onClick={() => setStage('project')} className="px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl text-sm font-bold shadow-sm hover:bg-gray-50 hover:text-purple-600 transition-all">+ 추가 입력</button>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-6">
                   {userData.projects.length > 0 ? userData.projects.map((project, index) => (
-                    <div key={index} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 space-y-3">
-                      <div className="flex justify-between gap-3">
-                        <input className={reviewInputClass} value={project.projectName} onChange={(e) => updateReviewListItem('projects', index, { projectName: e.target.value })} placeholder="프로젝트명" />
-                        <button onClick={() => removeReviewListItem('projects', index)} className="text-xs text-red-500 font-bold px-2">삭제</button>
+                    <div key={index} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm hover:border-purple-300 transition-colors relative group">
+                      <button onClick={() => removeReviewListItem('projects', index)} className="absolute top-6 right-6 text-sm text-red-400 font-bold hover:text-red-600 bg-red-50 px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">삭제</button>
+                      <h4 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
+                        <span className="bg-purple-100 text-purple-600 w-6 h-6 rounded-full flex items-center justify-center text-xs">{index + 1}</span>
+                        프로젝트 {index + 1}
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+                        <Input label="프로젝트명" value={project.projectName} onChange={(e) => updateReviewListItem('projects', index, { projectName: e.target.value })} placeholder="프로젝트명" />
+                        <LabeledSelect label="개인/팀" value={project.isTeam} onChange={(e: any) => updateReviewListItem('projects', index, { isTeam: e.target.value })}>
+                          <option value="">선택</option>
+                          <option value="individual">개인 프로젝트</option>
+                          <option value="team">팀 프로젝트</option>
+                        </LabeledSelect>
+                        <MonthYearPicker label="시작일" value={project.startDate} onChange={(val) => updateReviewListItem('projects', index, { startDate: val })} placeholder="YYYY.MM" />
+                        <MonthYearPicker label="종료일" value={project.endDate} onChange={(val) => updateReviewListItem('projects', index, { endDate: val })} placeholder="YYYY.MM" />
+                        <Input label="역할" value={project.role} onChange={(e) => updateReviewListItem('projects', index, { role: e.target.value })} placeholder="프론트엔드, 백엔드 등" />
+                        <Input label="기술 스택 (쉼표로 구분)" value={project.techStack.join(', ')} onChange={(e) => updateReviewListItem('projects', index, { techStack: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} placeholder="React, Node.js 등" />
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <input className={reviewInputClass} value={project.startDate} onChange={(e) => updateReviewListItem('projects', index, { startDate: e.target.value })} placeholder="시작일" />
-                        <input className={reviewInputClass} value={project.endDate} onChange={(e) => updateReviewListItem('projects', index, { endDate: e.target.value })} placeholder="종료일" />
-                        <input className={reviewInputClass} value={project.role} onChange={(e) => updateReviewListItem('projects', index, { role: e.target.value })} placeholder="역할" />
-                        <input className={reviewInputClass} value={project.isTeam} onChange={(e) => updateReviewListItem('projects', index, { isTeam: e.target.value })} placeholder="개인/팀" />
-                        <input className={reviewInputClass} value={project.techStack.join(', ')} onChange={(e) => updateReviewListItem('projects', index, { techStack: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} placeholder="기술스택, 쉼표로 구분" />
-                        <input className={reviewInputClass} value={project.outcome} onChange={(e) => updateReviewListItem('projects', index, { outcome: e.target.value })} placeholder="성과" />
+                      <div className="space-y-5">
+                        <LabeledTextarea label="프로젝트 설명" value={project.description} onChange={(e: any) => updateReviewListItem('projects', index, { description: e.target.value })} placeholder="어떤 문제를 해결하기 위한 프로젝트인지 설명해주세요." />
+                        <LabeledTextarea label="주요 성과 및 결과" value={project.outcome} onChange={(e: any) => updateReviewListItem('projects', index, { outcome: e.target.value })} placeholder="프로젝트를 통해 얻은 성과나 배운 점을 작성해주세요." />
                       </div>
-                      <textarea className={reviewTextAreaClass} value={project.description} onChange={(e) => updateReviewListItem('projects', index, { description: e.target.value })} placeholder="프로젝트 설명" />
                     </div>
-                  )) : <p className="text-sm text-gray-400">입력된 프로젝트가 없습니다.</p>}
+                  )) : (
+                    <div className="text-center py-12 bg-gray-50/50 rounded-2xl border border-dashed border-gray-300">
+                      <p className="text-gray-400 font-medium">입력된 프로젝트가 없습니다.</p>
+                      <button onClick={() => setStage('project')} className="mt-4 text-purple-600 font-bold hover:underline">프로젝트 추가하기</button>
+                    </div>
+                  )}
                 </div>
               </section>
 
-              <section className="bg-white/70 border border-gray-100 rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-gray-900">대외활동</h3>
-                  <button onClick={() => setStage('activity')} className="text-xs font-bold text-cyan-600 hover:underline">추가 입력</button>
+              {/* 대외활동 */}
+              <section className="bg-white/80 border border-gray-100 rounded-3xl p-8 shadow-sm">
+                <div className="flex items-center justify-between mb-8 border-b border-gray-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-indigo-50 text-indigo-500 rounded-xl flex items-center justify-center text-xl shadow-inner">🤝</div>
+                    <h3 className="text-2xl font-extrabold text-gray-900">대외활동</h3>
+                  </div>
+                  <button onClick={() => setStage('activity')} className="px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl text-sm font-bold shadow-sm hover:bg-gray-50 hover:text-indigo-600 transition-all">+ 추가 입력</button>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-6">
                   {userData.activities.length > 0 ? userData.activities.map((activity, index) => (
-                    <div key={index} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 space-y-3">
-                      <div className="flex justify-between gap-3">
-                        <input className={reviewInputClass} value={activity.activityName} onChange={(e) => updateReviewListItem('activities', index, { activityName: e.target.value })} placeholder="활동명" />
-                        <button onClick={() => removeReviewListItem('activities', index)} className="text-xs text-red-500 font-bold px-2">삭제</button>
+                    <div key={index} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm hover:border-indigo-300 transition-colors relative group">
+                      <button onClick={() => removeReviewListItem('activities', index)} className="absolute top-6 right-6 text-sm text-red-400 font-bold hover:text-red-600 bg-red-50 px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">삭제</button>
+                      <h4 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
+                        <span className="bg-indigo-100 text-indigo-600 w-6 h-6 rounded-full flex items-center justify-center text-xs">{index + 1}</span>
+                        대외활동 {index + 1}
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+                        <Input label="활동명" value={activity.activityName} onChange={(e) => updateReviewListItem('activities', index, { activityName: e.target.value })} placeholder="OO 서포터즈, 동아리 등" />
+                        <LabeledSelect label="활동 유형" value={activity.activityType} onChange={(e: any) => updateReviewListItem('activities', index, { activityType: e.target.value })}>
+                          <option value="">유형 선택</option>
+                          <option value="동아리">동아리</option>
+                          <option value="대외활동/서포터즈">대외활동/서포터즈</option>
+                          <option value="봉사활동">봉사활동</option>
+                          <option value="교육/부트캠프">교육/부트캠프</option>
+                          <option value="공모전/해커톤">공모전/해커톤</option>
+                          <option value="기타">기타</option>
+                        </LabeledSelect>
+                        <Input label="역할" value={activity.role} onChange={(e) => updateReviewListItem('activities', index, { role: e.target.value })} placeholder="팀장, 부원 등" />
+                        <div className="grid grid-cols-2 gap-3">
+                          <MonthYearPicker label="시작일" value={activity.startDate} onChange={(val) => updateReviewListItem('activities', index, { startDate: val })} placeholder="YYYY.MM" />
+                          <MonthYearPicker label="종료일" value={activity.endDate} onChange={(val) => updateReviewListItem('activities', index, { endDate: val })} placeholder="YYYY.MM" />
+                        </div>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <input className={reviewInputClass} value={activity.role} onChange={(e) => updateReviewListItem('activities', index, { role: e.target.value })} placeholder="역할" />
-                        <input className={reviewInputClass} value={activity.activityType} onChange={(e) => updateReviewListItem('activities', index, { activityType: e.target.value })} placeholder="활동 유형" />
-                        <input className={reviewInputClass} value={activity.startDate} onChange={(e) => updateReviewListItem('activities', index, { startDate: e.target.value })} placeholder="시작일" />
-                        <input className={reviewInputClass} value={activity.endDate} onChange={(e) => updateReviewListItem('activities', index, { endDate: e.target.value })} placeholder="종료일" />
+                      <div className="space-y-5">
+                        <LabeledTextarea label="활동 설명" value={activity.description} onChange={(e: any) => updateReviewListItem('activities', index, { description: e.target.value })} placeholder="주요 활동 내용을 설명해주세요." />
+                        <LabeledTextarea label="활동 성과" value={activity.achievement} onChange={(e: any) => updateReviewListItem('activities', index, { achievement: e.target.value })} placeholder="활동을 통해 얻은 성과나 배운 점을 작성해주세요." />
                       </div>
-                      <textarea className={reviewTextAreaClass} value={activity.description} onChange={(e) => updateReviewListItem('activities', index, { description: e.target.value })} placeholder="활동 설명" />
-                      <textarea className={reviewTextAreaClass} value={activity.achievement} onChange={(e) => updateReviewListItem('activities', index, { achievement: e.target.value })} placeholder="성과" />
                     </div>
-                  )) : <p className="text-sm text-gray-400">입력된 대외활동이 없습니다.</p>}
+                  )) : (
+                    <div className="text-center py-12 bg-gray-50/50 rounded-2xl border border-dashed border-gray-300">
+                      <p className="text-gray-400 font-medium">입력된 대외활동이 없습니다.</p>
+                      <button onClick={() => setStage('activity')} className="mt-4 text-indigo-600 font-bold hover:underline">대외활동 추가하기</button>
+                    </div>
+                  )}
                 </div>
               </section>
 
-              <section className="bg-white/70 border border-gray-100 rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-gray-900">자격증 및 어학</h3>
-                  <button onClick={() => setStage('cert')} className="text-xs font-bold text-cyan-600 hover:underline">추가 입력</button>
+              {/* 자격증 및 어학 */}
+              <section className="bg-white/80 border border-gray-100 rounded-3xl p-8 shadow-sm">
+                <div className="flex items-center justify-between mb-8 border-b border-gray-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-50 text-green-500 rounded-xl flex items-center justify-center text-xl shadow-inner">📜</div>
+                    <h3 className="text-2xl font-extrabold text-gray-900">자격증 및 어학</h3>
+                  </div>
+                  <button onClick={() => setStage('cert')} className="px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl text-sm font-bold shadow-sm hover:bg-gray-50 hover:text-green-600 transition-all">+ 추가 입력</button>
                 </div>
                 <div className="space-y-4">
                   {userData.certificates.length > 0 ? userData.certificates.map((cert, index) => (
-                    <div key={index} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
-                      <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-3">
-                        <input className={reviewInputClass} value={cert.name} onChange={(e) => updateReviewListItem('certificates', index, { name: e.target.value })} placeholder="이름" />
-                        <input className={reviewInputClass} value={cert.score} onChange={(e) => updateReviewListItem('certificates', index, { score: e.target.value })} placeholder="점수/등급" />
-                        <input className={reviewInputClass} value={cert.date} onChange={(e) => updateReviewListItem('certificates', index, { date: e.target.value })} placeholder="취득일" />
-                        <button onClick={() => removeReviewListItem('certificates', index)} className="text-xs text-red-500 font-bold px-2">삭제</button>
+                    <div key={index} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm hover:border-green-300 transition-colors relative group flex flex-col md:flex-row gap-4 items-end">
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4 w-full">
+                        <LabeledSelect label="종류" value={cert.type || ''} onChange={(e: any) => updateReviewListItem('certificates', index, { type: e.target.value as 'language' | 'general' })}>
+                          <option value="">선택</option>
+                          <option value="language">어학</option>
+                          <option value="general">자격증</option>
+                        </LabeledSelect>
+                        <Input label="자격증/어학명" value={cert.name} onChange={(e) => updateReviewListItem('certificates', index, { name: e.target.value })} placeholder="TOEIC, 정보처리기사 등" />
+                        <Input label="점수/등급" value={cert.score} onChange={(e) => updateReviewListItem('certificates', index, { score: e.target.value })} placeholder="900점, 1급 등" />
+                        <DatePicker label="취득일" value={cert.date} onChange={(val) => updateReviewListItem('certificates', index, { date: val })} placeholder="YYYY.MM.DD" />
                       </div>
+                      <button onClick={() => removeReviewListItem('certificates', index)} className="md:mb-1 w-full md:w-auto text-sm text-red-500 font-bold hover:text-white hover:bg-red-500 border border-red-200 px-4 py-3 rounded-xl transition-colors">삭제</button>
                     </div>
-                  )) : <p className="text-sm text-gray-400">입력된 자격증/어학이 없습니다.</p>}
+                  )) : (
+                    <div className="text-center py-12 bg-gray-50/50 rounded-2xl border border-dashed border-gray-300">
+                      <p className="text-gray-400 font-medium">입력된 자격증/어학 정보가 없습니다.</p>
+                      <button onClick={() => setStage('cert')} className="mt-4 text-green-600 font-bold hover:underline">자격증 추가하기</button>
+                    </div>
+                  )}
                 </div>
               </section>
 
-              <section className="bg-white/70 border border-gray-100 rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-gray-900">경력/인턴</h3>
-                  <button onClick={() => setStage('career')} className="text-xs font-bold text-cyan-600 hover:underline">추가 입력</button>
+              {/* 경력/인턴 */}
+              <section className="bg-white/80 border border-gray-100 rounded-3xl p-8 shadow-sm">
+                <div className="flex items-center justify-between mb-8 border-b border-gray-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-orange-50 text-orange-500 rounded-xl flex items-center justify-center text-xl shadow-inner">💼</div>
+                    <h3 className="text-2xl font-extrabold text-gray-900">경력 및 인턴</h3>
+                  </div>
+                  <button onClick={() => setStage('career')} className="px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-xl text-sm font-bold shadow-sm hover:bg-gray-50 hover:text-orange-600 transition-all">+ 추가 입력</button>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-6">
                   {userData.careers.length > 0 ? userData.careers.map((career, index) => (
-                    <div key={index} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 space-y-3">
-                      <div className="flex justify-between gap-3">
-                        <input className={reviewInputClass} value={career.companyName} onChange={(e) => updateReviewListItem('careers', index, { companyName: e.target.value })} placeholder="회사명" />
-                        <button onClick={() => removeReviewListItem('careers', index)} className="text-xs text-red-500 font-bold px-2">삭제</button>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <select className={reviewInputClass} value={career.type} onChange={(e) => updateReviewListItem('careers', index, { type: e.target.value as CareerData['type'] })}>
+                    <div key={index} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm hover:border-orange-300 transition-colors relative group">
+                      <button onClick={() => removeReviewListItem('careers', index)} className="absolute top-6 right-6 text-sm text-red-400 font-bold hover:text-red-600 bg-red-50 px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">삭제</button>
+                      <h4 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
+                        <span className="bg-orange-100 text-orange-600 w-6 h-6 rounded-full flex items-center justify-center text-xs">{index + 1}</span>
+                        경력 {index + 1}
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+                        <Input label="회사명" value={career.companyName} onChange={(e) => updateReviewListItem('careers', index, { companyName: e.target.value })} placeholder="회사명" />
+                        <LabeledSelect label="유형" value={career.type} onChange={(e: any) => updateReviewListItem('careers', index, { type: e.target.value as CareerData['type'] })}>
                           <option value="intern">인턴</option>
-                          <option value="career">경력</option>
-                        </select>
-                        <input className={reviewInputClass} value={career.department} onChange={(e) => updateReviewListItem('careers', index, { department: e.target.value })} placeholder="부서/직무" />
-                        <input className={reviewInputClass} value={career.position || ''} onChange={(e) => updateReviewListItem('careers', index, { position: e.target.value })} placeholder="직급/직책" />
-                        <input className={reviewInputClass} value={career.startDate} onChange={(e) => updateReviewListItem('careers', index, { startDate: e.target.value })} placeholder="시작일" />
-                        <input className={reviewInputClass} value={career.endDate} onChange={(e) => updateReviewListItem('careers', index, { endDate: e.target.value })} placeholder="종료일" />
+                          <option value="career">경력(정규직)</option>
+                        </LabeledSelect>
+                        <Input label="부서/직무" value={career.department} onChange={(e) => updateReviewListItem('careers', index, { department: e.target.value })} placeholder="개발팀, 마케팅팀 등" />
+                        <Input label="직급/직책" value={career.position || ''} onChange={(e) => updateReviewListItem('careers', index, { position: e.target.value })} placeholder="사원, 연구원 등" />
+                        <MonthYearPicker label="시작일" value={career.startDate} onChange={(val) => updateReviewListItem('careers', index, { startDate: val })} placeholder="YYYY.MM" />
+                        <MonthYearPicker label="종료일" value={career.endDate} onChange={(val) => updateReviewListItem('careers', index, { endDate: val })} placeholder="YYYY.MM" />
                       </div>
-                      <textarea className={reviewTextAreaClass} value={career.description} onChange={(e) => updateReviewListItem('careers', index, { description: e.target.value })} placeholder="업무 설명" />
+                      <LabeledTextarea label="주요 업무 및 성과" value={career.description} onChange={(e: any) => updateReviewListItem('careers', index, { description: e.target.value })} placeholder="수행하신 주요 업무와 성과를 구체적으로 작성해주세요." />
                     </div>
-                  )) : <p className="text-sm text-gray-400">입력된 경력/인턴이 없습니다.</p>}
+                  )) : (
+                    <div className="text-center py-12 bg-gray-50/50 rounded-2xl border border-dashed border-gray-300">
+                      <p className="text-gray-400 font-medium">입력된 경력/인턴 정보가 없습니다.</p>
+                      <button onClick={() => setStage('career')} className="mt-4 text-orange-600 font-bold hover:underline">경력 추가하기</button>
+                    </div>
+                  )}
                 </div>
               </section>
             </div>
 
-            <div className="sticky bottom-4 mt-10 flex flex-col sm:flex-row justify-center gap-3 bg-white/80 backdrop-blur-xl border border-white rounded-2xl p-4 shadow-lg">
-              <Button variant="secondary" onClick={() => setStage('prompt_career')} className="px-8 py-4 rounded-xl">이전 단계로</Button>
-              <Button variant="primary" onClick={() => completeAndAnalyze(userData)} className="px-10 py-4 rounded-xl font-bold shadow-lg">AI 분석 시작하기</Button>
+            <div className="sticky bottom-4 mt-12 flex flex-col sm:flex-row justify-center gap-4 bg-white/90 backdrop-blur-xl border border-white/60 rounded-3xl p-6 shadow-2xl">
+              <Button variant="secondary" onClick={() => setStage('prompt_career')} className="px-10 py-5 rounded-2xl text-lg font-bold border-gray-200">이전 단계로</Button>
+              <Button variant="primary" onClick={() => completeAndAnalyze(userData)} className="px-12 py-5 rounded-2xl text-lg font-extrabold shadow-xl shadow-cyan-500/30 hover:shadow-cyan-500/50 bg-gradient-to-r from-cyan-500 to-blue-600 transform hover:-translate-y-1 transition-all flex items-center gap-3">
+                <span className="text-2xl">✨</span>
+                이대로 AI 분석 시작하기
+              </Button>
             </div>
           </GlassCard>
         </div>

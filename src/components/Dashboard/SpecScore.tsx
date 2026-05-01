@@ -67,16 +67,13 @@ export const SpecScore: React.FC<SpecScoreProps> = ({ score, percentile, isInfoI
             </div>
 
             <div className="space-y-4 max-w-md z-10">
-                <div className="inline-block bg-cyan-100 text-cyan-700 text-sm font-bold px-4 py-1.5 rounded-full border border-cyan-200 mb-2">
-                    상위 {100 - percentile}%
-                </div>
                 <h3 className="text-3xl font-extrabold text-gray-900 leading-tight">
-                    전체 지원자 평균보다<br />
-                    <span className="text-cyan-600">{score > 60 ? score - 60 : 0}점</span> 높습니다.
+                    현재 스펙 기준<br />
+                    <span className="text-cyan-600">{score}점</span>으로 분석되었습니다.
                 </h3>
                 <p className="text-gray-500 text-base leading-relaxed">
-                    합격 가능성이 높은 상태입니다.<br />
-                    부족한 2%를 채우러 가볼까요?
+                    저장된 정보를 바탕으로 AI가 종합 점수를 계산했습니다.<br />
+                    상세 리포트에서 강점과 보완점을 확인해보세요.
                 </p>
             </div>
 
