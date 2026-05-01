@@ -17,6 +17,8 @@ jobs:
           node-version: '24'
 
       - name: 3. 패키지 설치 및 React 빌드
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
         run: |
           npm install
           npm run build
