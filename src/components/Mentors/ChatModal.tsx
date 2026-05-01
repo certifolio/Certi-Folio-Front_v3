@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import SockJS from 'sockjs-client';
 import { Client, IMessage } from '@stomp/stompjs';
 
-const WS_BASE_URL = import.meta.env.VITE_API_URL || 'http://ec2-54-180-82-115.ap-northeast-2.compute.amazonaws.com:8080';
+const WS_BASE_URL = import.meta.env.VITE_API_URL || 'http://54.180.82.115';
 
 interface ChatModalProps {
   isOpen: boolean;
