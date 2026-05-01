@@ -26,6 +26,7 @@ export const MentorGrid: React.FC<MentorGridProps> = ({ limit, showAll, filterCa
     // Chat Modal States
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [chatTarget, setChatTarget] = useState<{ name: string, role: string, avatar: string, company: string } | null>(null);
+    const [chatMentorId, setChatMentorId] = useState<number>(0);
 
     // 백엔드에서 멘토 목록 불러오기
     useEffect(() => {
@@ -72,20 +73,20 @@ export const MentorGrid: React.FC<MentorGridProps> = ({ limit, showAll, filterCa
             await mentoringApplicationApi.createApplication({
                 mentorId: Number(selectedMentor.id),
                 topic: applyTopic,
-                message: applyMessage,
+                description: applyMessage,
             });
             alert('멘토링 신청이 완료되었습니다!');
             closeModal();
         } catch (err) {
-            console.warn('신청 API 실패:', err);
-            alert('신청되었습니다!');
-            closeModal();
+            console.error('신청 API 실패:', err);
+            alert('멘토링 신청에 실패했습니다. 다시 시도해주세요.');
         } finally {
             setIsApplying(false);
         }
     };
 
     const handleOpenChat = (mentor: Mentor) => {
+        setChatMentorId(Number(mentor.id));
         setChatTarget({
             name: mentor.name,
             role: mentor.role,
@@ -203,6 +204,7 @@ export const MentorGrid: React.FC<MentorGridProps> = ({ limit, showAll, filterCa
                 <ChatModal
                     isOpen={isChatOpen}
                     onClose={() => setIsChatOpen(false)}
+                    mentorId={chatMentorId}
                     target={chatTarget}
                 />
             )}
@@ -222,29 +224,24 @@ export const MentorGrid: React.FC<MentorGridProps> = ({ limit, showAll, filterCa
 
                         <div className="space-y-4">
                             <Input label="신청 주제" placeholder="예: 이력서 첨삭, 커리어 상담" value={applyTopic} onChange={(e) => setApplyTopic(e.target.value)} />
+
                             <div>
-                                <label className="text-gray-500 text-xs font-bold uppercase tracking-wider ml-1 mb-1 block">희망 일정</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button className="py-2 rounded-xl border border-cyan-500 bg-cyan-50 text-cyan-700 text-sm font-bold">2/25 (화) 20:00</button>
-                                    <button className="py-2 rounded-xl border border-gray-200 text-gray-600 text-sm hover:border-cyan-300 hover:bg-cyan-50">2/27 (목) 19:00</button>
-                                    <button className="py-2 rounded-xl border border-gray-200 text-gray-600 text-sm hover:border-cyan-300 hover:bg-cyan-50">3/01 (토) 14:00</button>
-                                    <button className="py-2 rounded-xl border border-gray-200 text-gray-600 text-sm hover:border-cyan-300 hover:bg-cyan-50">직접 입력</button>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="text-gray-500 text-xs font-bold uppercase tracking-wider ml-1 mb-1 block">사전 질문 내용</label>
+                                <label className="text-gray-500 text-xs font-bold uppercase tracking-wider ml-1 mb-1 block">신청 내용</label>
                                 <textarea
                                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 resize-none h-24"
-                                    placeholder="멘토님에게 궁금한 점을 미리 남겨주세요."
+                                    placeholder="멘토님에게 상담받고 싶은 내용을 상세히 작성해주세요. (50자 이상)"
                                     value={applyMessage}
                                     onChange={(e) => setApplyMessage(e.target.value)}
                                 />
+                                <p className={`text-xs mt-1 ml-1 ${applyMessage.length >= 50 ? 'text-green-500' : 'text-gray-400'}`}>
+                                    {applyMessage.length}/50자 {applyMessage.length >= 50 ? '✓' : '(최소 50자)'}
+                                </p>
                             </div>
                         </div>
 
                         <div className="flex gap-3 mt-8">
                             <Button variant="secondary" className="flex-1" onClick={closeModal}>취소</Button>
-                            <Button variant="primary" className="flex-1" onClick={handleSubmitApplication} disabled={isApplying}>
+                            <Button variant="primary" className="flex-1" onClick={handleSubmitApplication} disabled={isApplying || applyMessage.length < 50}>
                                 {isApplying ? '신청 중...' : '신청 완료'}
                             </Button>
                         </div>

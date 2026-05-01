@@ -1,9 +1,17 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { mentorApi } from '../../api/mentoringApi';
 import { GlassCard } from '../UI/GlassCard';
 import { Button } from '../UI/Button';
 import { Input } from '../UI/Input';
+
+
+interface AvailabilitySlot {
+  dayOfWeek: 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
+  startTime: string;  // "10:00:00"
+  endTime: string;    // "11:00:00"
+  slotType: 'VIDEO' | 'CHAT' | 'IN_PERSON';
+}
 
 interface MentorRegistrationData {
   name: string;
@@ -13,9 +21,8 @@ interface MentorRegistrationData {
   bio: string;
   skills: string[];
   certificates: string;
-  availableDays: string[];
-  availableTimes: { [key: string]: string[] };
-  mentoringType: string[]; // 'online', 'offline', 'chat'
+  availability: AvailabilitySlot[];
+  preferredFormat: 'ONLINE' | 'OFFLINE' | 'BOTH' | '';
 }
 
 interface MentorRegistrationFlowProps {
@@ -28,23 +35,25 @@ export const MentorRegistrationFlow: React.FC<MentorRegistrationFlowProps> = ({ 
   const [step, setStep] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const [tagInput, setTagInput] = useState('');
-  const [editingDay, setEditingDay] = useState<string | null>(null);
-  const [selectionStart, setSelectionStart] = useState<string | null>(null);
-  const [hoverTime, setHoverTime] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // 새 슬롯 추가용 임시 state
+  const [newSlotDay, setNewSlotDay] = useState<string>('');
+  const [newSlotStart, setNewSlotStart] = useState('10:00');
+  const [newSlotEnd, setNewSlotEnd] = useState('11:00');
+  const [newSlotType, setNewSlotType] = useState<'VIDEO' | 'CHAT' | 'IN_PERSON'>('VIDEO');
+
   const [data, setData] = useState<MentorRegistrationData>({
-    name: userProfile?.name || '', // Default to user profile name
+    name: userProfile?.name || '',
     company: '',
     role: '',
     years: '',
     bio: '',
     skills: [],
     certificates: '',
-    availableDays: [],
-    availableTimes: {},
-    mentoringType: []
+    availability: [],
+    preferredFormat: ''
   });
 
   const handleChange = (field: keyof MentorRegistrationData, value: any) => {
@@ -75,179 +84,53 @@ export const MentorRegistrationFlow: React.FC<MentorRegistrationFlowProps> = ({ 
     handleChange('skills', data.skills.filter(t => t !== tag));
   };
 
-  // Toggle Mentoring Type
-  const toggleType = (value: string) => {
-    const current = data.mentoringType;
-    if (current.includes(value)) {
-      handleChange('mentoringType', current.filter(i => i !== value));
-    } else {
-      handleChange('mentoringType', [...current, value]);
+  // 슬롯 추가
+  const addSlot = () => {
+    if (!newSlotDay || !newSlotStart || !newSlotEnd) return;
+    const startFormatted = newSlotStart.length === 5 ? `${newSlotStart}:00` : newSlotStart;
+    const endFormatted = newSlotEnd.length === 5 ? `${newSlotEnd}:00` : newSlotEnd;
+    if (startFormatted >= endFormatted) {
+      alert('종료 시간은 시작 시간 이후여야 합니다.');
+      return;
+    }
+    const exists = data.availability.some(
+      s => s.dayOfWeek === newSlotDay && s.startTime === startFormatted && s.endTime === endFormatted
+    );
+    if (exists) return;
+    handleChange('availability', [
+      ...data.availability,
+      { dayOfWeek: newSlotDay, startTime: startFormatted, endTime: endFormatted, slotType: newSlotType },
+    ]);
+  };
+
+  // 슬롯 삭제
+  const removeSlot = (idx: number) => {
+    handleChange('availability', data.availability.filter((_: AvailabilitySlot, i: number) => i !== idx));
+  };
+
+  // 요일 순서대로 정렬
+  const dayOrder = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+  const sortedSlots = [...data.availability].sort((a, b) => {
+    const dayDiff = dayOrder.indexOf(a.dayOfWeek) - dayOrder.indexOf(b.dayOfWeek);
+    if (dayDiff !== 0) return dayDiff;
+    return a.startTime.localeCompare(b.startTime);
+  });
+
+  const slotTypeLabel = (t: string) => {
+    switch (t) {
+      case 'VIDEO': return '💻 화상';
+      case 'CHAT': return '💬 채팅';
+      case 'IN_PERSON': return '☕ 대면';
+      default: return t;
     }
   };
 
-  // Toggle Days & Manage Editing Day
-  const toggleDay = (day: string) => {
-    const current = data.availableDays;
-    let newDays;
-    if (current.includes(day)) {
-      newDays = current.filter(i => i !== day);
-      if (editingDay === day) {
-        setEditingDay(newDays.length > 0 ? newDays[0] : null);
-        setSelectionStart(null); // Reset selection if day removed
-      }
-    } else {
-      newDays = [...current, day];
-      setEditingDay(day);
-      setSelectionStart(null); // Reset selection for new day
-    }
-    handleChange('availableDays', newDays);
-  };
-
-  // Generate Time Slots (09:00 ~ 24:00) - 30 slots
-  const timeSlots = [];
-  for (let i = 9; i < 24; i++) {
-    timeSlots.push(`${i.toString().padStart(2, '0')}:00`);
-    timeSlots.push(`${i.toString().padStart(2, '0')}:30`);
-  }
-
-  const timeToMin = (t: string) => {
-    const [h, m] = t.split(':').map(Number);
-    return h * 60 + m;
-  };
-
-  // Handle Time Selection (Range Logic)
-  const handleTimeClick = (day: string, time: string) => {
-    if (!selectionStart) {
-      // Start selection
-      setSelectionStart(time);
-    } else {
-      // End selection
-      const startMin = timeToMin(selectionStart);
-      const endMin = timeToMin(time);
-
-      const actualStart = Math.min(startMin, endMin);
-      const actualEnd = Math.max(startMin, endMin);
-
-      const currentTimes = new Set(data.availableTimes[day] || []);
-
-      // Add all slots in range
-      timeSlots.forEach(slot => {
-        const slotMin = timeToMin(slot);
-        if (slotMin >= actualStart && slotMin <= actualEnd) {
-          currentTimes.add(slot);
-        }
-      });
-
-      handleChange('availableTimes', { ...data.availableTimes, [day]: Array.from(currentTimes).sort() });
-      setSelectionStart(null);
-    }
-  };
-
-  // Remove a specific range (or slot) logic would be complex with just chips, 
-  // so we'll implement removing by clearing specific slots involved in a range chip.
-  const removeTimeRange = (day: string, rangeStart: string, rangeEnd: string) => { // rangeEnd is exclusive for display, inclusive for calculation?
-    // Display ranges are formatted "09:00 ~ 10:30". 10:30 is the END time of the 10:00 slot.
-    // So we need to remove slots from start up to (end - 30min).
-
-    const startMin = timeToMin(rangeStart);
-    const endMin = timeToMin(rangeEnd); // This comes from formatted string, e.g., 10:30
-
-    const newTimes = (data.availableTimes[day] || []).filter(t => {
-      const tMin = timeToMin(t);
-      // If t is within [start, end), remove it. Note: endMin is the end time of the slot, so slot start < endMin.
-      return !(tMin >= startMin && tMin < endMin);
-    });
-
-    handleChange('availableTimes', { ...data.availableTimes, [day]: newTimes });
-  };
-
-  // Group continuous slots into ranges
-  const getRanges = (times: string[]) => {
-    if (!times || times.length === 0) return [];
-
-    const sorted = [...times].sort();
-    const ranges: { start: string, end: string }[] = [];
-    let start = sorted[0];
-    let prev = sorted[0];
-
-    for (let i = 1; i < sorted.length; i++) {
-      const curr = sorted[i];
-      const prevMin = timeToMin(prev);
-      const currMin = timeToMin(curr);
-
-      if (currMin - prevMin === 30) {
-        prev = curr;
-      } else {
-        // End of a range.
-        // The range ends 30 mins after the last slot
-        const endMin = timeToMin(prev) + 30;
-        const h = Math.floor(endMin / 60);
-        const m = endMin % 60;
-        const endTime = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-        ranges.push({ start, end: endTime });
-
-        start = curr;
-        prev = curr;
-      }
-    }
-
-    // Push last range
-    const endMin = timeToMin(prev) + 30;
-    const h = Math.floor(endMin / 60);
-    const m = endMin % 60;
-    const endTime = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-    ranges.push({ start, end: endTime });
-
-    return ranges;
-  };
-
-  // Helper to determine slot status
-  const getSlotStatus = (time: string) => {
-    if (!editingDay) return 'default';
-
-    const isSelected = data.availableTimes[editingDay]?.includes(time);
-
-    if (selectionStart && hoverTime) {
-      const s = timeToMin(selectionStart);
-      const h = timeToMin(hoverTime);
-      const t = timeToMin(time);
-      const start = Math.min(s, h);
-      const end = Math.max(s, h);
-
-      if (t >= start && t <= end) {
-        return 'preview';
-      }
-    }
-
-    if (selectionStart === time) return 'start';
-    if (isSelected) return 'selected';
-
-    return 'default';
-  };
-
-  // 프론트엔드 데이터를 백엔드 DTO 형식으로 변환
-  const formatAvailability = (days: string[], times: { [key: string]: string[] }): string[] => {
-    const result: string[] = [];
-    for (const day of days) {
-      const dayTimes = times[day];
-      if (dayTimes && dayTimes.length > 0) {
-        const ranges = getRanges(dayTimes);
-        for (const range of ranges) {
-          result.push(`${day} ${range.start}-${range.end}`);
-        }
-      } else {
-        result.push(day);
-      }
-    }
-    return result;
-  };
-
-  const formatPreferredFormat = (types: string[]): string => {
-    if (types.length === 0) return 'online';
-    if (types.includes('online') && types.includes('offline')) return 'both';
-    if (types.includes('online')) return 'online';
-    if (types.includes('offline')) return 'offline';
-    return types[0];
+  const dayLabel = (d: string) => {
+    const labels: Record<string, string> = {
+      MONDAY: '월', TUESDAY: '화', WEDNESDAY: '수', THURSDAY: '목',
+      FRIDAY: '금', SATURDAY: '토', SUNDAY: '일'
+    };
+    return labels[d] || d;
   };
 
   const handleSubmit = async () => {
@@ -257,15 +140,15 @@ export const MentorRegistrationFlow: React.FC<MentorRegistrationFlowProps> = ({ 
       const payload = {
         name: data.name,
         title: data.role,
-        company: data.company || undefined,
+        company: data.company,
         experience: data.years,
         expertise: data.skills,
         bio: data.bio,
-        availability: formatAvailability(data.availableDays, data.availableTimes),
-        preferredFormat: formatPreferredFormat(data.mentoringType),
+        availability: data.availability,
+        preferredFormat: (data.preferredFormat || 'ONLINE') as 'ONLINE' | 'OFFLINE' | 'BOTH',
         certificates: data.certificates
           ? data.certificates.split(',').map(c => c.trim()).filter(Boolean)
-          : undefined,
+          : [],
       };
       await mentorApi.applyMentor(payload);
       onComplete();
@@ -278,6 +161,7 @@ export const MentorRegistrationFlow: React.FC<MentorRegistrationFlowProps> = ({ 
 
   const totalSteps = 6;
   const progress = ((step + 1) / totalSteps) * 100;
+
 
   // Render Step Content
   const renderStep = () => {
@@ -391,137 +275,214 @@ export const MentorRegistrationFlow: React.FC<MentorRegistrationFlowProps> = ({ 
           </div>
         );
 
-      // Step 5: Preferences (Updated)
+      // Step 5: 가능 시간대 & 선호 방식
       case 5:
         return (
           <div className="flex flex-col w-full max-w-lg gap-6 animate-fade-in-up">
             <div className="text-center mb-4">
               <h2 className="text-3xl font-extrabold text-gray-900 mb-2">멘토링 선호 방식</h2>
-              <p className="text-gray-500">가능한 시간대와 방식을 선택해주세요.</p>
+              <p className="text-gray-500">가능한 시간대와 방식을 설정해주세요.</p>
             </div>
 
-            {/* Type Selection */}
+            {/* 선호 방식 (preferredFormat) */}
             <div className="space-y-2">
-              <label className="text-gray-500 text-xs font-bold uppercase ml-1">진행 방식 (복수 선택 가능)</label>
+              <label className="text-gray-500 text-xs font-bold uppercase ml-1">선호 방식</label>
               <div className="flex gap-3">
-                {['online', 'offline', 'chat'].map(type => (
+                {(['ONLINE', 'OFFLINE', 'BOTH'] as const).map(fmt => (
                   <button
-                    key={type}
-                    onClick={() => toggleType(type)}
-                    className={`flex-1 py-3 rounded-xl border font-bold text-sm transition-all ${data.mentoringType.includes(type)
+                    key={fmt}
+                    onClick={() => handleChange('preferredFormat', fmt)}
+                    className={`flex-1 py-3 rounded-xl border font-bold text-sm transition-all ${data.preferredFormat === fmt
                       ? 'bg-cyan-500 border-cyan-500 text-white shadow-lg shadow-cyan-500/30'
                       : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
                       }`}
                   >
-                    {type === 'online' ? '💻 화상' : type === 'offline' ? '☕ 대면' : '💬 채팅'}
+                    {fmt === 'ONLINE' ? '💻 온라인' : fmt === 'OFFLINE' ? '☕ 오프라인' : '🔄 모두'}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Day Selection */}
-            <div className="space-y-2">
-              <label className="text-gray-500 text-xs font-bold uppercase ml-1">가능 요일 (복수 선택 가능)</label>
-              <div className="flex justify-between gap-2">
-                {['월', '화', '수', '목', '금', '토', '일'].map(day => (
-                  <button
-                    key={day}
-                    onClick={() => toggleDay(day)}
-                    className={`w-10 h-10 rounded-full border font-bold text-sm flex items-center justify-center transition-all ${data.availableDays.includes(day)
-                      ? day === editingDay ? 'bg-purple-600 border-purple-600 text-white shadow-md ring-2 ring-purple-300' : 'bg-purple-100 border-purple-200 text-purple-700'
-                      : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
-                      }`}
-                  >
-                    {day}
-                  </button>
-                ))}
+            {/* 가능 시간대 추가 - 달력 스타일 */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              {/* 헤더 */}
+              <div className="bg-gradient-to-r from-purple-50 to-cyan-50 px-5 py-3 border-b border-gray-100">
+                <label className="text-gray-700 text-sm font-bold">📅 가능 시간대 추가</label>
               </div>
-            </div>
 
-            {/* Time Selection (New Feature) */}
-            {data.availableDays.length > 0 && editingDay && (
-              <div className="space-y-3 bg-gray-50 p-4 rounded-2xl border border-gray-100 animate-fade-in-up">
-                <div className="flex justify-between items-center mb-1">
-                  <label className="text-gray-500 text-xs font-bold uppercase ml-1">가능 시간대 설정 (30분 단위)</label>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-purple-600 font-bold bg-purple-50 px-2 py-1 rounded">{editingDay}</span>
-                    {selectionStart && (
-                      <span className="text-[10px] text-gray-400 animate-pulse">종료 시간 선택 중...</span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-sm overflow-hidden">
-                  <p className="text-[11px] text-gray-400 mb-3 font-medium flex justify-between">
-                    <span>
-                      {selectionStart
-                        ? <span className="text-purple-600 font-bold">끝나는 시간을 선택해주세요.</span>
-                        : "시작 시간을 클릭하고, 종료 시간을 클릭하세요."
-                      }
-                    </span>
-                    <span>09:00 ~ 24:00</span>
-                  </p>
-
-                  {/* Horizontal Bar Graph */}
-                  <div className="relative pt-6 pb-2 select-none">
-                    {/* Time Labels */}
-                    <div className="absolute top-0 left-0 w-full flex justify-between text-[10px] text-gray-300 font-medium px-1">
-                      <span>09</span>
-                      <span>12</span>
-                      <span>15</span>
-                      <span>18</span>
-                      <span>21</span>
-                      <span>24</span>
-                    </div>
-
-                    {/* Bars Container */}
-                    <div className="flex h-12 w-full bg-gray-100 rounded-lg overflow-hidden cursor-pointer touch-none" onMouseLeave={() => setHoverTime(null)}>
-                      {timeSlots.map((time, idx) => {
-                        const status = getSlotStatus(time);
-
-                        let bgClass = 'bg-gray-100'; // Default
-                        if (status === 'selected') bgClass = 'bg-cyan-500';
-                        if (status === 'start') bgClass = 'bg-purple-500';
-                        if (status === 'preview') bgClass = 'bg-purple-200';
-
-                        return (
-                          <div
-                            key={time}
-                            onClick={() => handleTimeClick(editingDay, time)}
-                            onMouseEnter={() => setHoverTime(time)}
-                            className={`flex-1 transition-colors border-r border-white/30 last:border-r-0 relative group ${bgClass}`}
-                            title={time}
-                          >
-                            {/* Tooltip on Hover */}
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-1.5 py-0.5 bg-black/80 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10 transition-opacity">
-                              {time}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Selected Ranges List */}
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {getRanges(data.availableTimes[editingDay]).map((range, idx) => (
-                    <div key={idx} className="flex items-center gap-2 px-3 py-1.5 bg-cyan-50 border border-cyan-100 rounded-lg text-xs font-bold text-cyan-700 animate-fade-in-up">
-                      <span>{range.start} ~ {range.end}</span>
+              <div className="p-5 space-y-5">
+                {/* 요일 선택 - 달력 느낌 원형 버튼 */}
+                <div className="space-y-2">
+                  <label className="text-[11px] text-gray-400 font-bold uppercase tracking-wider ml-1">요일 선택</label>
+                  <div className="flex justify-between gap-2">
+                    {([
+                      { key: 'MONDAY', label: '월' },
+                      { key: 'TUESDAY', label: '화' },
+                      { key: 'WEDNESDAY', label: '수' },
+                      { key: 'THURSDAY', label: '목' },
+                      { key: 'FRIDAY', label: '금' },
+                      { key: 'SATURDAY', label: '토' },
+                      { key: 'SUNDAY', label: '일' },
+                    ]).map(day => (
                       <button
-                        onClick={() => removeTimeRange(editingDay, range.start, range.end)}
-                        className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-cyan-200 text-cyan-600 transition-colors"
+                        key={day.key}
+                        onClick={() => setNewSlotDay(day.key)}
+                        className={`w-11 h-11 rounded-full border-2 font-bold text-sm flex items-center justify-center transition-all ${
+                          newSlotDay === day.key
+                            ? 'bg-purple-600 border-purple-600 text-white shadow-lg shadow-purple-500/30 scale-110'
+                            : 'bg-white border-gray-200 text-gray-500 hover:border-purple-300 hover:text-purple-600 hover:bg-purple-50'
+                        }`}
                       >
-                        ×
+                        {day.label}
                       </button>
-                    </div>
-                  ))}
-                  {getRanges(data.availableTimes[editingDay]).length === 0 && (
-                    <p className="text-xs text-gray-400 py-1 pl-1">선택된 시간대가 없습니다.</p>
-                  )}
+                    ))}
+                  </div>
                 </div>
+
+                {/* 시간 범위 선택 - 스피너 */}
+                <div className="space-y-2">
+                  <label className="text-[11px] text-gray-400 font-bold uppercase tracking-wider ml-1">시간 범위</label>
+                  <div className="flex items-center gap-2">
+                    {/* 시작 시간 */}
+                    <div className="flex-1 flex items-center justify-center gap-1 bg-gradient-to-r from-cyan-50 to-blue-50 rounded-xl border-2 border-cyan-200 px-2 py-1.5">
+                      <svg className="w-3.5 h-3.5 text-cyan-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      {/* 시 스피너 */}
+                      <div className="flex flex-col items-center">
+                        <button onClick={() => { const h = (parseInt(newSlotStart.split(':')[0]) + 1) % 24; setNewSlotStart(`${String(h).padStart(2,'0')}:${newSlotStart.split(':')[1] || '00'}`); }} className="text-gray-400 hover:text-cyan-600 transition-colors leading-none p-0.5">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 15l7-7 7 7" /></svg>
+                        </button>
+                        <span className="text-lg font-extrabold text-gray-800 w-7 text-center select-none">{newSlotStart.split(':')[0]}</span>
+                        <button onClick={() => { const h = (parseInt(newSlotStart.split(':')[0]) - 1 + 24) % 24; setNewSlotStart(`${String(h).padStart(2,'0')}:${newSlotStart.split(':')[1] || '00'}`); }} className="text-gray-400 hover:text-cyan-600 transition-colors leading-none p-0.5">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                      </div>
+                      <span className="text-lg font-extrabold text-gray-300">:</span>
+                      {/* 분 스피너 */}
+                      <div className="flex flex-col items-center">
+                        <button onClick={() => { const m = newSlotStart.split(':')[1] === '00' ? '30' : '00'; setNewSlotStart(`${newSlotStart.split(':')[0]}:${m}`); }} className="text-gray-400 hover:text-cyan-600 transition-colors leading-none p-0.5">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 15l7-7 7 7" /></svg>
+                        </button>
+                        <span className="text-lg font-extrabold text-gray-800 w-7 text-center select-none">{newSlotStart.split(':')[1] || '00'}</span>
+                        <button onClick={() => { const m = newSlotStart.split(':')[1] === '00' ? '30' : '00'; setNewSlotStart(`${newSlotStart.split(':')[0]}:${m}`); }} className="text-gray-400 hover:text-cyan-600 transition-colors leading-none p-0.5">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 화살표 */}
+                    <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+                    </div>
+
+                    {/* 종료 시간 */}
+                    <div className="flex-1 flex items-center justify-center gap-1 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border-2 border-purple-200 px-2 py-1.5">
+                      <svg className="w-3.5 h-3.5 text-purple-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      {/* 시 스피너 */}
+                      <div className="flex flex-col items-center">
+                        <button onClick={() => { const h = (parseInt(newSlotEnd.split(':')[0]) + 1) % 24; setNewSlotEnd(`${String(h).padStart(2,'0')}:${newSlotEnd.split(':')[1] || '00'}`); }} className="text-gray-400 hover:text-purple-600 transition-colors leading-none p-0.5">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 15l7-7 7 7" /></svg>
+                        </button>
+                        <span className="text-lg font-extrabold text-gray-800 w-7 text-center select-none">{newSlotEnd.split(':')[0]}</span>
+                        <button onClick={() => { const h = (parseInt(newSlotEnd.split(':')[0]) - 1 + 24) % 24; setNewSlotEnd(`${String(h).padStart(2,'0')}:${newSlotEnd.split(':')[1] || '00'}`); }} className="text-gray-400 hover:text-purple-600 transition-colors leading-none p-0.5">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                      </div>
+                      <span className="text-lg font-extrabold text-gray-300">:</span>
+                      {/* 분 스피너 */}
+                      <div className="flex flex-col items-center">
+                        <button onClick={() => { const m = newSlotEnd.split(':')[1] === '00' ? '30' : '00'; setNewSlotEnd(`${newSlotEnd.split(':')[0]}:${m}`); }} className="text-gray-400 hover:text-purple-600 transition-colors leading-none p-0.5">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 15l7-7 7 7" /></svg>
+                        </button>
+                        <span className="text-lg font-extrabold text-gray-800 w-7 text-center select-none">{newSlotEnd.split(':')[1] || '00'}</span>
+                        <button onClick={() => { const m = newSlotEnd.split(':')[1] === '00' ? '30' : '00'; setNewSlotEnd(`${newSlotEnd.split(':')[0]}:${m}`); }} className="text-gray-400 hover:text-purple-600 transition-colors leading-none p-0.5">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 방식 선택 - 칩 버튼 */}
+                <div className="space-y-2">
+                  <label className="text-[11px] text-gray-400 font-bold uppercase tracking-wider ml-1">진행 방식</label>
+                  <div className="flex gap-2">
+                    {([
+                      { key: 'VIDEO' as const, icon: '💻', label: '화상' },
+                      { key: 'CHAT' as const, icon: '💬', label: '채팅' },
+                      { key: 'IN_PERSON' as const, icon: '☕', label: '대면' },
+                    ]).map(type => (
+                      <button
+                        key={type.key}
+                        onClick={() => setNewSlotType(type.key)}
+                        className={`flex-1 py-2.5 rounded-xl border-2 font-bold text-xs transition-all flex items-center justify-center gap-1.5 ${
+                          newSlotType === type.key
+                            ? type.key === 'VIDEO' ? 'bg-blue-50 border-blue-400 text-blue-700 shadow-sm'
+                            : type.key === 'CHAT' ? 'bg-green-50 border-green-400 text-green-700 shadow-sm'
+                            : 'bg-orange-50 border-orange-400 text-orange-700 shadow-sm'
+                            : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span>{type.icon}</span>
+                        <span>{type.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 추가 버튼 */}
+                <button
+                  onClick={addSlot}
+                  disabled={!newSlotDay || !newSlotStart || !newSlotEnd}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-500 to-cyan-500 text-white font-bold text-sm hover:from-purple-600 hover:to-cyan-600 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-lg shadow-purple-500/20 disabled:shadow-none"
+                >
+                  + 시간대 추가
+                </button>
               </div>
-            )}
+            </div>
+
+            {/* 추가된 슬롯 목록 */}
+            <div className="space-y-2">
+              <label className="text-gray-500 text-xs font-bold uppercase ml-1">
+                등록된 시간대 ({data.availability.length}개)
+              </label>
+              {sortedSlots.length === 0 ? (
+                <div className="bg-gray-50 rounded-xl p-6 text-center border border-dashed border-gray-200">
+                  <div className="text-3xl mb-2">🕐</div>
+                  <p className="text-sm text-gray-400">아직 시간대가 없습니다.<br />위에서 요일, 시간, 방식을 선택 후 추가해주세요.</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-50 max-h-[200px] overflow-y-auto custom-scrollbar shadow-sm">
+                  {sortedSlots.map((slot, idx) => {
+                    const realIdx = data.availability.findIndex(
+                      s => s.dayOfWeek === slot.dayOfWeek && s.startTime === slot.startTime && s.endTime === slot.endTime && s.slotType === slot.slotType
+                    );
+                    return (
+                      <div key={idx} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors group">
+                        <div className="flex items-center gap-3">
+                          <span className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 text-white font-bold text-sm flex items-center justify-center shadow-sm">{dayLabel(slot.dayOfWeek)}</span>
+                          <div className="flex flex-col">
+                            <span className="text-sm text-gray-800 font-bold">{slot.startTime.substring(0, 5)} ~ {slot.endTime.substring(0, 5)}</span>
+                          </div>
+                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                            slot.slotType === 'VIDEO' ? 'text-blue-600 bg-blue-50 border-blue-100'
+                            : slot.slotType === 'CHAT' ? 'text-green-600 bg-green-50 border-green-100'
+                            : 'text-orange-600 bg-orange-50 border-orange-100'
+                          }`}>
+                            {slotTypeLabel(slot.slotType)}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => removeSlot(realIdx)}
+                          className="text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
             {submitError && (
               <div className="w-full px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm font-medium text-center animate-fade-in-up">
@@ -532,7 +493,7 @@ export const MentorRegistrationFlow: React.FC<MentorRegistrationFlowProps> = ({ 
             <Button
               variant="neon"
               onClick={handleSubmit}
-              disabled={data.mentoringType.length === 0 || isSubmitting}
+              disabled={!data.preferredFormat || data.availability.length === 0 || isSubmitting}
               className="w-full py-4 text-lg mt-6 shadow-cyan-500/30"
             >
               {isSubmitting ? '신청 중...' : '등록 신청 완료 🚀'}

@@ -1,22 +1,15 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { apiClient, ApiError } from '../api/client';
 
+// 백엔드 UserResponseDTO 기준
 interface UserProfile {
-    id: string;
+    id: number;
     name: string | null;
-    nickname: string | null;
     email: string | null;
-    profileImage: string | null;
+    picture: string | null;
+    role: string; // 'USER' | 'ADMIN'
     provider: string;
-    phone: string | null;
-    location: string | null;
-    university: string | null;
-    major: string | null;
-    year: string | null;
-    company: string | null;
-    bio: string | null;
-    isInfoInputted: boolean;
-    role: string;
+    birthYear: number | null;
 }
 
 interface AuthContextType {
@@ -47,8 +40,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const fetchUserProfile = async () => {
         try {
-            const response = await apiClient.get('/api/user/me');
-            const profile: UserProfile = response.data || response;
+            // client.ts의 handleResponse가 ApiResponse.result를 자동 추출함
+            const profile: UserProfile = await apiClient.get('/api/users/me');
             setUserProfile(profile);
             setIsLoggedIn(true);
             console.log('[Auth] 유저 프로필 로드:', profile);
@@ -77,6 +70,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUserProfile(null);
         setIsLoggedIn(false);
     };
+
+    // 앱 시작 시: localStorage에 토큰이 있으면 서버에 유효성 검증
+    // 단, /auth/callback 경로에서는 AuthCallback 컴포넌트가 토큰 처리를 담당하므로 건너뜀
+    useEffect(() => {
+        // OAuth 콜백 중이면 AuthCallback이 토큰을 직접 처리
+        if (window.location.pathname === '/auth/callback') return;
+
+        const savedToken = localStorage.getItem('access_token');
+        if (savedToken) {
+            fetchUserProfile().catch(() => {
+                // 토큰이 유효하지 않으면 자동 로그아웃
+                console.warn('[Auth] 저장된 토큰이 유효하지 않아 로그아웃합니다.');
+                handleLogout();
+            });
+        }
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     return (
         <AuthContext.Provider value={{

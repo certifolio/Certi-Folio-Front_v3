@@ -1,17 +1,22 @@
 /**
  * Mentoring API
  * 백엔드 엔드포인트: /api/mentors, /api/mentoring-applications
+ *
+ * [변경사항]
+ * - MentorController: ResponseEntity 직접 반환 (ApiResponse 래핑 없음)
+ * - MentorApplicationRequest: preferredFormat이 enum(ONLINE/OFFLINE/BOTH), certificates 필수
+ * - MentoringApplication CreateRequest: description 50자 이상 필수
+ * - RejectRequest: reason 필드 @RequestBody로 필수
  */
 import { apiClient } from './client';
 
 // ===== Mentors =====
 
 export const mentorApi = {
-    /** 멘토 검색/목록 조회 - GET /api/mentors */
-    searchMentors: (params?: { skills?: string; location?: string }) => {
+    /** 멘토 검색/목록 조회 - GET /api/mentors?skills=React,Node.js */
+    searchMentors: (params?: { skills?: string }) => {
         const query = new URLSearchParams();
         if (params?.skills) query.set('skills', params.skills);
-        if (params?.location) query.set('location', params.location);
         const qs = query.toString();
         return apiClient.get(`/api/mentors${qs ? `?${qs}` : ''}`);
     },
@@ -24,13 +29,13 @@ export const mentorApi = {
     applyMentor: (data: {
         name: string;
         title: string;
-        company?: string;
+        company: string;
         experience: string;
         expertise: string[];
         bio: string;
-        availability: string[];
-        preferredFormat: string;
-        certificates?: string[];
+        availability: { dayOfWeek: string; startTime: string; endTime: string; slotType: 'VIDEO' | 'CHAT' | 'IN_PERSON' }[];
+        preferredFormat: 'ONLINE' | 'OFFLINE' | 'BOTH';
+        certificates: string[];
     }) => apiClient.post('/api/mentors/apply', data),
 
     /** 내 멘토 프로필 조회 - GET /api/mentors/me */
@@ -38,18 +43,28 @@ export const mentorApi = {
         apiClient.get('/api/mentors/me'),
 
     /** 내 멘토 프로필 수정 - PUT /api/mentors/me */
-    updateMyMentorProfile: (data: any) =>
-        apiClient.put('/api/mentors/me', data),
+    updateMyMentorProfile: (data: {
+        name: string;
+        title: string;
+        company: string;
+        experience: string;
+        expertise: string[];
+        bio: string;
+        availability: { dayOfWeek: string; startTime: string; endTime: string; slotType: 'VIDEO' | 'CHAT' | 'IN_PERSON' }[];
+        preferredFormat: 'ONLINE' | 'OFFLINE' | 'BOTH';
+        certificates: string[];
+    }) => apiClient.put('/api/mentors/me', data),
 };
 
 // ===== Mentoring Applications =====
 
 export const mentoringApplicationApi = {
-    /** 멘토링 신청 - POST /api/mentoring-applications */
+    /** 멘토링 신청 - POST /api/mentoring-applications
+     *  description은 50자 이상 필수 */
     createApplication: (data: {
         mentorId: number;
-        message?: string;
-        topic?: string;
+        topic: string;
+        description: string;
     }) => apiClient.post('/api/mentoring-applications', data),
 
     /** 받은 신청 목록 조회 (멘토용) - GET /api/mentoring-applications/received */
@@ -64,7 +79,24 @@ export const mentoringApplicationApi = {
     approveApplication: (id: number) =>
         apiClient.post(`/api/mentoring-applications/${id}/approve`),
 
-    /** 신청 거절 - POST /api/mentoring-applications/:id/reject */
-    rejectApplication: (id: number, reason?: string) =>
-        apiClient.post(`/api/mentoring-applications/${id}/reject`, reason ? { reason } : undefined),
+    /** 신청 거절 - POST /api/mentoring-applications/:id/reject
+     *  reason 필수 (RequestBody) */
+    rejectApplication: (id: number, reason: string) =>
+        apiClient.post(`/api/mentoring-applications/${id}/reject`, { reason }),
+};
+
+// ===== Admin =====
+
+export const adminMentorApi = {
+    /** [어드민] 전체 멘토 신청 목록 조회 - GET /api/mentors/admin/applications */
+    getApplications: () =>
+        apiClient.get('/api/mentors/admin/applications'),
+
+    /** [어드민] 멘토 승인 - POST /api/mentors/admin/:id/approve */
+    approve: (id: number) =>
+        apiClient.post(`/api/mentors/admin/${id}/approve`),
+
+    /** [어드민] 멘토 거절 - POST /api/mentors/admin/:id/reject */
+    reject: (id: number) =>
+        apiClient.post(`/api/mentors/admin/${id}/reject`),
 };

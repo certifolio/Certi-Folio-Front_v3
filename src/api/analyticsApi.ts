@@ -4,12 +4,25 @@
  */
 import { apiClient } from './client';
 
-export const analyticsApi = {
-    /** 커리어 선호도 조회 - GET /api/analytics/preferences */
-    getPreferences: () =>
-        apiClient.get('/api/analytics/preferences'),
+export interface AnalyticsResult {
+    id: number;
+    overallScore: number;
+    categoryScores: Record<string, number>;
+    strengths: string[];
+    improvements: string[];
+    summary: string;
+}
 
-    /** 스킬 분석 조회 - GET /api/analytics/skill-analysis */
-    getSkillAnalysis: () =>
-        apiClient.get('/api/analytics/skill-analysis'),
+export const analyticsApi = {
+    /** 최신 분석 결과 조회 - GET /api/analytics */
+    getLatest: (): Promise<AnalyticsResult> =>
+        apiClient.get('/api/analytics'),
+
+    /** 분석 이력 전체 조회 - GET /api/analytics/history */
+    getHistory: (): Promise<AnalyticsResult[]> =>
+        apiClient.get('/api/analytics/history'),
+
+    /** 포트폴리오 분석 요청 (새로 분석 트리거) - POST /api/analytics */
+    analyzePortfolio: (): Promise<AnalyticsResult> =>
+        apiClient.post('/api/analytics'),
 };

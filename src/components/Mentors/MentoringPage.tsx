@@ -4,7 +4,8 @@ import { MentorRegistrationFlow } from './MentorRegistrationFlow';
 import { GlassCard } from '../UI/GlassCard';
 import { Button } from '../UI/Button';
 import { ChatModal } from './ChatModal';
-import { mentoringApplicationApi } from '../../api/mentoringApi';
+import { mentoringApplicationApi, mentorApi } from '../../api/mentoringApi';
+import { mentoringSessionApi, type SessionItem } from '../../api/mentoringSessionApi';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface MentoringPageProps {
@@ -36,10 +37,33 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
 
     const [sessions, setSessions] = useState<{ id: number, mentorId?: number, mentorName: string, role: string, company: string, imageUrl: string, date: string, status: string, topic: string }[]>([]);
 
-    // 백엔드에서 보낸 신청 목록 로드
+    // 백엔드에서 멘토링 세션 목록 로드
     useEffect(() => {
         if (!isLoggedIn || !token) return;
-        const fetchSentApplications = async () => {
+        const fetchSessions = async () => {
+            try {
+                // 1. 실제 세션 API 시도
+                const sessionRes = await mentoringSessionApi.getMySessions();
+                const sessionItems = sessionRes.sessions || [];
+                if (sessionItems.length > 0) {
+                    setSessions(sessionItems.map((s: SessionItem) => ({
+                        id: s.id,
+                        mentorId: s.mentorId,
+                        mentorName: s.mentor?.name || '멘토',
+                        role: s.mentor?.title || '',
+                        company: s.mentor?.company || '',
+                        imageUrl: `https://picsum.photos/100/100?random=${s.id}`,
+                        date: s.startDate || '',
+                        status: s.status === 'active' ? 'confirmed' : s.status === 'completed' ? 'completed' : 'pending',
+                        topic: s.topic || '',
+                    })));
+                    return;
+                }
+            } catch {
+                // 세션 API 실패 시 sent applications fallback
+            }
+
+            // 2. Fallback: sent applications
             try {
                 const res = await mentoringApplicationApi.getSentApplications();
                 const items = res.applications || res;
@@ -57,15 +81,24 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
                     })));
                 }
             } catch (err) {
-                console.warn('멘토링 신청 목록 로드 실패, Mock 데이터 사용:', err);
+                console.warn('멘토링 신청 목록 로드 실패:', err);
             }
         };
-        fetchSentApplications();
+        fetchSessions();
+
+        // Check Mentor Application Status
+        mentorApi.getMyMentorProfile()
+            .then((res: any) => {
+                if (res.status === 'PENDING') setAppStatus('pending');
+                else if (res.status === 'APPROVED') setAppStatus('approved');
+            })
+            .catch(() => setAppStatus('none'));
+
     }, [isLoggedIn, token]);
 
-    // 받은 멘토링 신청 로드 (멘토용)
+    // 받은 멘토링 신청 로드 (멘토 전용 - approved일 때만 호출)
     useEffect(() => {
-        if (!isLoggedIn || !token) return;
+        if (!isLoggedIn || !token || appStatus !== 'approved') return;
         const fetchReceivedApplications = async () => {
             try {
                 const res = await mentoringApplicationApi.getReceivedApplications();
@@ -87,7 +120,7 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
             }
         };
         fetchReceivedApplications();
-    }, [isLoggedIn, token]);
+    }, [isLoggedIn, token, appStatus]);
 
     // 신청 승인
     const handleApproveApp = async (appId: number) => {
@@ -104,9 +137,11 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
 
     // 신청 거절
     const handleRejectApp = async (appId: number) => {
+        const reason = window.prompt('거절 사유를 입력해주세요:');
+        if (!reason || !reason.trim()) return;
         setProcessingAppId(appId);
         try {
-            await mentoringApplicationApi.rejectApplication(appId);
+            await mentoringApplicationApi.rejectApplication(appId, reason.trim());
             setReceivedApps(prev => prev.map(a => a.id === appId ? { ...a, status: 'REJECTED' } : a));
         } catch (err) {
             console.error('거절 실패:', err);
@@ -213,8 +248,8 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
                 </div>
             )}
 
-            {/* Section: Received Applications (멘토용) */}
-            {receivedApps.length > 0 && (
+            {/* Section: Received Applications (멘토 전용) */}
+            {appStatus === 'approved' && receivedApps.length > 0 && (
                 <section>
                     <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
                         📬 받은 멘토링 신청
@@ -288,8 +323,8 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
                 </section>
             )}
 
-            {/* Section 1: My Mentoring */}
-            <section>
+            {/* Section 1: My Mentoring (멘티 전용) */}
+            {appStatus !== 'approved' && <section>
                 <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
                     🙋 내가 신청한 멘토링
                 </h3>
@@ -353,10 +388,10 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
                         </div>
                     )}
                 </div>
-            </section>
+            </section>}
 
-            {/* Section 2: Recommended Mentors (Existing) */}
-            <section>
+            {/* Section 2: Recommended Mentors (멘티 전용) */}
+            {appStatus !== 'approved' && <section>
                 <div className="flex justify-between items-end mb-6">
                     <div>
                         <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -372,11 +407,11 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
                 <div className="bg-white/30 p-1 rounded-3xl">
                     <MentorGrid limit={4} />
                 </div>
-            </section>
+            </section>}
 
-            {/* Section 3: Apply as Mentor */}
+            {/* Section 3: Apply as Mentor (미등록 유저만) */}
             <section className="mt-12">
-                <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-gray-900 to-gray-800 p-8 md:p-12 text-center md:text-left flex flex-col md:flex-row items-center justify-between gap-8 shadow-xl">
+                {appStatus === 'none' && <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-gray-900 to-gray-800 p-8 md:p-12 text-center md:text-left flex flex-col md:flex-row items-center justify-between gap-8 shadow-xl">
                     {/* Background Pattern */}
                     <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-cyan-500 rounded-full mix-blend-overlay filter blur-3xl opacity-20"></div>
                     <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-64 h-64 bg-purple-500 rounded-full mix-blend-overlay filter blur-3xl opacity-20"></div>
@@ -398,7 +433,7 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
                             {appStatus === 'none' ? '멘토로 등록하기 🚀' : (appStatus === 'pending' ? '심사 진행 중 🕒' : '멘토 활동 중 😎')}
                         </Button>
                     </div>
-                </div>
+                </div>}
             </section>
 
             {/* --- MODALS --- */}
@@ -476,9 +511,9 @@ export const MentoringPage: React.FC<MentoringPageProps> = () => {
                 <ChatModal
                     isOpen={isChatOpen}
                     onClose={() => setIsChatOpen(false)}
-                    target={selectedChatTarget}
                     mentorId={selectedChatTarget.mentorId}
                     menteeUserId={selectedChatTarget.menteeUserId}
+                    target={selectedChatTarget}
                 />
             )}
 
