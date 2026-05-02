@@ -1,0 +1,60 @@
+name: certifolio
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: certifolio-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: CertiFolio
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: Asia/Seoul
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    container_name: certifolio-backend
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TZ: Asia/Seoul
+      SERVER_PORT: 8080
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/CertiFolio?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_REDIRECT_URI: https://certifolio.shop/login/oauth2/code/google
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_NAVER_REDIRECT_URI: https://certifolio.shop/login/oauth2/code/naver
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KAKAO_REDIRECT_URI: https://certifolio.shop/login/oauth2/code/kakao
+      APP_OAUTH2_REDIRECT_URI: https://certifolio.shop/auth/callback
+      APP_OAUTH2_AUTHORIZED_REDIRECT_URIS_0: https://certifolio.shop/auth/callback
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      args:
+        VITE_API_URL: ${VITE_API_URL:-https://certifolio.shop}
+    container_name: certifolio-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:

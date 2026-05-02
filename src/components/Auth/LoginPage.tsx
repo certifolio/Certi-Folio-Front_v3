@@ -1,7 +1,7 @@
 import React from 'react';
 import { GlassCard } from '../UI/GlassCard';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://54.180.82.115';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 const handleOAuthLogin = (provider: 'kakao' | 'naver' | 'google') => {
   window.location.href = `${API_BASE}/oauth2/authorization/${provider}`;
