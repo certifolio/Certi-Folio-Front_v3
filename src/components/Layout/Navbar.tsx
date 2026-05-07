@@ -9,6 +9,7 @@ interface NavbarProps {
     onNavigate: (view: ViewType) => void;
     currentView: ViewType;
     onOpenAdmin: () => void;
+    onInfoInputClick?: () => void;
 }
 
 import { useAuth } from '../../contexts/AuthContext';
