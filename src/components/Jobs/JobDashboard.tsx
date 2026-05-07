@@ -153,38 +153,42 @@ export const JobDashboard: React.FC = () => {
                                 ))}
 
                                 {days.map(day => {
-                                    const colPos = (startDay + day - 1) % 7;
                                     const isToday = year === now.getFullYear() && month === now.getMonth() + 1 && day === now.getDate();
-                                    const activeJobs = enriched.filter(j => j.effectiveStart <= day && day <= j.effectiveEnd);
+
+                                    const startingJobs = enriched.filter(j => j.effectiveStart === day);
+                                    const endingJobs = enriched.filter(j => j.effectiveEnd === day);
+
+                                    const markers = [
+                                        ...startingJobs.map(job => ({ type: 'start' as const, job })),
+                                        ...endingJobs.map(job => ({ type: 'end' as const, job })),
+                                    ];
 
                                     return (
-                                        <div key={day} className="bg-white min-h-[100px] flex flex-col hover:bg-gray-50 transition-colors">
+                                        <div key={day} className={`bg-white min-h-[100px] flex flex-col hover:bg-gray-50/80 transition-colors ${isToday ? 'ring-1 ring-inset ring-cyan-400/40 bg-cyan-50/30' : ''}`}>
                                             <div className="px-1.5 pt-1.5 pb-1">
                                                 <span className={`text-sm font-medium ${isToday ? 'w-6 h-6 inline-flex items-center justify-center bg-cyan-600 text-white rounded-full text-xs' : 'text-gray-700'}`}>
                                                     {day}
                                                 </span>
                                             </div>
-                                            <div className="flex flex-col gap-px">
-                                                {activeJobs.map(job => {
-                                                    const isFirstVisible = day === job.effectiveStart;
-                                                    const isEnd = day === job.effectiveEnd;
-                                                    const isFirstOfWeek = colPos === 0;
-                                                    const isLastOfWeek = colPos === 6;
-                                                    const roundLeft = isFirstVisible || isFirstOfWeek;
-                                                    const roundRight = isEnd || isLastOfWeek;
-                                                    const showName = isFirstVisible || isFirstOfWeek;
+                                            <div className="flex flex-col gap-[3px] px-1 pb-1 overflow-hidden">
+                                                {markers.slice(0, 5).map(({ type, job }) => {
+                                                    const isStart = type === 'start';
                                                     return (
                                                         <div
-                                                            key={job.id}
-                                                            style={{ height: '18px' }}
-                                                            className={`flex items-center overflow-hidden ${job.color} ${roundLeft ? 'rounded-l-full ml-0.5' : ''} ${roundRight ? 'rounded-r-full mr-0.5' : ''}`}
+                                                            key={`${type}-${job.id}`}
+                                                            className="flex items-center gap-1 cursor-default"
+                                                            title={`${job.content} (${isStart ? '시작' : '마감'})`}
                                                         >
-                                                            <span className="text-[9px] font-bold px-1.5 truncate leading-none w-full">
-                                                                {showName ? job.companyName : isEnd ? '마감' : ''}
+                                                            <div className={`w-[6px] h-[6px] rounded-full shrink-0 ${isStart ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                                                            <span className={`text-[9px] font-semibold truncate leading-none ${isStart ? 'text-emerald-700' : 'text-red-600'}`}>
+                                                                {job.companyName}
                                                             </span>
                                                         </div>
                                                     );
                                                 })}
+                                                {markers.length > 5 && (
+                                                    <span className="text-[8px] text-gray-400 font-medium pl-0.5">+{markers.length - 5}건</span>
+                                                )}
                                             </div>
                                         </div>
                                     );
