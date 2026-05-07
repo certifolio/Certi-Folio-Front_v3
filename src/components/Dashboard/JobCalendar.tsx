@@ -76,45 +76,50 @@ export const JobCalendar: React.FC = () => {
 
                     {/* Date cells */}
                     {days.map(day => {
-                        const colPos = (startDay + day - 1) % 7;
                         const isToday = day === new Date().getDate();
-                        const activeJobs = jobPostings
-                            .map(job => ({
-                                ...job,
-                                effectiveStart: Math.max(1, job.startDay),
-                                effectiveEnd: Math.min(job.endDay, daysInMonth),
-                            }))
-                            .filter(job => job.effectiveStart <= day && day <= job.effectiveEnd);
+
+                        const startingJobs = jobPostings.filter(job => {
+                            const effectiveStart = Math.max(1, job.startDay);
+                            return effectiveStart === day;
+                        });
+
+                        const endingJobs = jobPostings.filter(job => {
+                            const effectiveEnd = Math.min(job.endDay, daysInMonth);
+                            return effectiveEnd === day;
+                        });
+
+                        const markers = [
+                            ...startingJobs.map(job => ({ type: 'start' as const, job })),
+                            ...endingJobs.map(job => ({ type: 'end' as const, job })),
+                        ];
 
                         return (
-                            <div key={day} className="bg-white min-h-[80px] flex flex-col hover:bg-gray-50 transition-colors">
+                            <div key={day} className={`bg-white min-h-[80px] flex flex-col hover:bg-gray-50/80 transition-colors ${isToday ? 'ring-1 ring-inset ring-cyan-400/40 bg-cyan-50/30' : ''}`}>
                                 <div className="px-1.5 pt-1 pb-0.5">
                                     <span className={`text-xs font-medium ${isToday ? 'w-5 h-5 inline-flex items-center justify-center bg-cyan-600 text-white rounded-full' : 'text-gray-700'}`}>
                                         {day}
                                     </span>
                                 </div>
-                                <div className="flex flex-col gap-px">
-                                    {activeJobs.map(job => {
-                                        const isFirstVisible = day === job.effectiveStart;
-                                        const isEnd = day === job.effectiveEnd;
-                                        const isFirstOfWeek = colPos === 0;
-                                        const isLastOfWeek = colPos === 6;
-                                        const roundLeft = isFirstVisible || isFirstOfWeek;
-                                        const roundRight = isEnd || isLastOfWeek;
-                                        const showName = isFirstVisible || isFirstOfWeek;
+                                <div className="flex flex-col gap-[3px] px-1 pb-1 overflow-hidden">
+                                    {markers.slice(0, 4).map(({ type, job }) => {
+                                        const isStart = type === 'start';
+                                        const companyName = job.company.replace('㈜', '').replace('(유)', '').trim();
                                         return (
                                             <div
-                                                key={job.id}
-                                                className={`h-[18px] flex items-center overflow-hidden ${job.color} ${roundLeft ? 'rounded-l-full ml-0.5' : ''} ${roundRight ? 'rounded-r-full mr-0.5' : ''}`}
+                                                key={`${type}-${job.id}`}
+                                                className="flex items-center gap-1 group/marker cursor-default"
+                                                title={`${job.role} (${isStart ? '시작' : '마감'})`}
                                             >
-                                                <span className="text-[9px] font-bold px-1.5 truncate leading-none w-full">
-                                                    {showName
-                                                        ? job.company.replace('㈜', '').replace('(유)', '').trim()
-                                                        : isEnd ? '마감' : ''}
+                                                <div className={`w-[6px] h-[6px] rounded-full shrink-0 ${isStart ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                                                <span className={`text-[9px] font-semibold truncate leading-none ${isStart ? 'text-emerald-700' : 'text-red-600'}`}>
+                                                    {companyName}
                                                 </span>
                                             </div>
                                         );
                                     })}
+                                    {markers.length > 4 && (
+                                        <span className="text-[8px] text-gray-400 font-medium pl-0.5">+{markers.length - 4}건</span>
+                                    )}
                                 </div>
                             </div>
                         );
