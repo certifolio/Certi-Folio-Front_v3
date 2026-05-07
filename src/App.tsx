@@ -434,41 +434,53 @@ export const App: React.FC = () => {
         {/* VIEW 11: COMMUNITY PAGE */}
         {currentView === 'community' && (
           <div className="relative w-full pt-36 pb-20">
-            <CommunityPage 
-                onPostClick={(id) => {
-                    navigate('community-post', { postId: id });
-                }}
-                onCreatePostClick={() => navigate('community-create')}
-            />
+            {!isLoggedIn && <FullPageLockOverlay onLogin={() => setCurrentView('login')} message="로그인이 필요한 서비스입니다" description={"커뮤니티에 참여하고 다른 사용자들과\n정보를 공유하려면 로그인해주세요."} />}
+            <div className={`${!isLoggedIn ? 'blur-md opacity-40 select-none pointer-events-none' : ''}`}>
+              <CommunityPage 
+                  onPostClick={(id) => {
+                      navigate('community-post', { postId: id });
+                  }}
+                  onCreatePostClick={() => navigate('community-create')}
+              />
+            </div>
           </div>
         )}
 
         {/* VIEW 11.2: PORTFOLIO DRAFT */}
         {currentView === 'portfolio-draft' && (
           <div className="relative w-full pt-24 pb-20">
-            <PortfolioDraftPage />
+            {!isLoggedIn && <FullPageLockOverlay onLogin={() => setCurrentView('login')} message="로그인이 필요한 서비스입니다" description={"AI 포트폴리오 작성 서비스를\n이용하시려면 로그인해주세요."} />}
+            <div className={`${!isLoggedIn ? 'blur-md opacity-40 select-none pointer-events-none' : ''}`}>
+              <PortfolioDraftPage />
+            </div>
           </div>
         )}
 
         {/* VIEW 11.5: COMMUNITY CREATE POST */}
         {currentView === 'community-create' && (
           <div className="relative w-full pt-36 pb-20">
-            <CreatePostPage 
-                onBack={() => navigate('community')}
-                onSuccess={(newId) => {
-                    navigate('community-post', { postId: newId });
-                }}
-            />
+            {!isLoggedIn && <FullPageLockOverlay onLogin={() => setCurrentView('login')} message="로그인이 필요한 서비스입니다" description={"게시글을 작성하려면\n로그인해주세요."} />}
+            <div className={`${!isLoggedIn ? 'blur-md opacity-40 select-none pointer-events-none' : ''}`}>
+              <CreatePostPage 
+                  onBack={() => navigate('community')}
+                  onSuccess={(newId) => {
+                      navigate('community-post', { postId: newId });
+                  }}
+              />
+            </div>
           </div>
         )}
 
         {/* VIEW 12: COMMUNITY POST DETAIL */}
         {currentView === 'community-post' && selectedPostId && (
           <div className="relative w-full pt-36 pb-20">
-            <PostDetail 
-                postId={selectedPostId} 
-                onBack={() => navigate('community')} 
-            />
+            {!isLoggedIn && <FullPageLockOverlay onLogin={() => setCurrentView('login')} message="로그인이 필요한 서비스입니다" description={"게시글 내용을 확인하려면\n로그인해주세요."} />}
+            <div className={`${!isLoggedIn ? 'blur-md opacity-40 select-none pointer-events-none' : ''}`}>
+              <PostDetail 
+                  postId={selectedPostId} 
+                  onBack={() => navigate('community')} 
+              />
+            </div>
           </div>
         )}
 
