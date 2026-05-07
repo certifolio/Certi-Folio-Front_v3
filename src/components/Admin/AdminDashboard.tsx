@@ -4,17 +4,18 @@ import { Button } from '../UI/Button';
 import { adminMentorApi } from '../../api/mentoringApi';
 
 interface Applicant {
-    id: number;
+    id: number;          // mentorId
+    userId: number;
     name: string;
+    email: string;
     company: string;
-    role: string;
-    year: string;
-    date: string;
+    role: string;        // title
+    year: string;        // experience
+    date: string;        // appliedAt
     status: string;
     bio: string;
     skills: string[];
-    mentoringType: string[];
-    availableDays: string[];
+    rejectReason: string | null;
 }
 
 const parsePreferredFormat = (format: string | null): string[] => {
@@ -45,17 +46,18 @@ export const AdminDashboard: React.FC = () => {
                 const res = await adminMentorApi.getApplications();
                 const mentors: any[] = res?.mentors ?? [];
                 setApplicants(mentors.map((m: any) => ({
-                    id: m.id,
+                    id: m.mentorId,          // 백엔드: mentorId
+                    userId: m.userId,
                     name: m.name ?? '-',
+                    email: m.email ?? '',
                     company: m.company ?? '-',
-                    role: m.title ?? '-',
+                    role: m.title ?? '-',    // 백엔드: title
                     year: m.experience ?? '-',
-                    date: formatDate(m.createdAt),
-                    status: m.status ?? 'pending',
+                    date: formatDate(m.appliedAt), // 백엔드: appliedAt
+                    status: (m.status ?? 'PENDING').toUpperCase(),
                     bio: m.bio ?? '',
                     skills: m.skills ?? [],
-                    mentoringType: parsePreferredFormat(m.preferredFormat),
-                    availableDays: m.availabilities ?? [],
+                    rejectReason: m.rejectReason ?? null,
                 })));
             } catch (err) {
                 setError('데이터를 불러오는 데 실패했습니다.');
@@ -78,10 +80,12 @@ export const AdminDashboard: React.FC = () => {
             if (confirmAction.type === 'approved') {
                 await adminMentorApi.approve(confirmAction.id);
             } else {
-                await adminMentorApi.reject(confirmAction.id);
+                await adminMentorApi.reject(confirmAction.id, rejectReason.trim() || undefined);
             }
             setApplicants(prev =>
-                prev.map(app => app.id === confirmAction.id ? { ...app, status: confirmAction.type } : app)
+                prev.map(app => app.id === confirmAction.id
+                    ? { ...app, status: confirmAction.type === 'approved' ? 'APPROVED' : 'REJECTED' }
+                    : app)
             );
         } catch {
             alert('처리 중 오류가 발생했습니다.');
@@ -93,19 +97,12 @@ export const AdminDashboard: React.FC = () => {
     };
 
     const filteredApplicants = applicants.filter(app => {
-        if (filter === 'pending') return app.status === 'pending';
-        if (filter === 'processed') return app.status !== 'pending';
+        if (filter === 'pending') return app.status === 'PENDING';
+        if (filter === 'processed') return app.status !== 'PENDING';
         return true;
     });
 
-    const getMentoringTypeLabel = (type: string) => {
-        switch (type) {
-            case 'online': return '💻 화상';
-            case 'offline': return '☕ 대면';
-            case 'chat': return '💬 채팅';
-            default: return type;
-        }
-    };
+
 
     return (
         <div className="w-full max-w-6xl mx-auto pb-20 px-4 pt-36 animate-fade-in-up">
@@ -149,39 +146,20 @@ export const AdminDashboard: React.FC = () => {
                                     {app.bio && (
                                         <p className="text-sm text-gray-600 mb-3 bg-gray-50 p-3 rounded-lg leading-relaxed">"{app.bio}"</p>
                                     )}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mt-4">
-                                        <div>
-                                            <strong className="text-gray-400 text-xs uppercase block mb-1">전문 분야 (Skills)</strong>
-                                            <div className="flex flex-wrap gap-1">
-                                                {app.skills.map((skill, i) => (
-                                                    <span key={i} className="px-2 py-1 bg-cyan-50 text-cyan-700 rounded text-xs font-bold border border-cyan-100">{skill}</span>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {app.mentoringType.length > 0 && (
-                                                <div>
-                                                    <strong className="text-gray-400 text-xs uppercase block mb-1">진행 방식</strong>
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {app.mentoringType.map((t, i) => (
-                                                            <span key={i} className="text-xs text-gray-600 bg-white border border-gray-200 px-1.5 py-0.5 rounded">{getMentoringTypeLabel(t)}</span>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                            {app.availableDays.length > 0 && (
-                                                <div>
-                                                    <strong className="text-gray-400 text-xs uppercase block mb-1">가능 시간대</strong>
-                                                    <span className="text-xs text-gray-700 font-medium">{app.availableDays.join(', ')}</span>
-                                                </div>
-                                            )}
+                                    <div className="mt-4">
+                                        <strong className="text-gray-400 text-xs uppercase block mb-1">전문 분야 (Skills)</strong>
+                                        <div className="flex flex-wrap gap-1">
+                                            {app.skills.map((skill, i) => (
+                                                <span key={i} className="px-2 py-1 bg-cyan-50 text-cyan-700 rounded text-xs font-bold border border-cyan-100">{skill}</span>
+                                            ))}
                                         </div>
                                     </div>
                                 </div>
 
                                 <div className="flex flex-col items-end gap-2 min-w-[120px]">
                                     <span className="text-xs text-gray-400 mb-2">신청일: {app.date}</span>
-                                    {app.status === 'pending' ? (
+                                    {app.email && <span className="text-xs text-gray-400 truncate max-w-[140px]">{app.email}</span>}
+                                    {app.status === 'PENDING' ? (
                                         <div className="flex flex-col gap-2 w-full">
                                             <button
                                                 onClick={() => handleStatusClick(app.id, 'approved', app.name)}
@@ -197,13 +175,18 @@ export const AdminDashboard: React.FC = () => {
                                             </button>
                                         </div>
                                     ) : (
-                                        <span className={`px-4 py-2 rounded-xl text-sm font-bold border w-full text-center ${
-                                            app.status === 'approved'
-                                                ? 'bg-green-50 text-green-600 border-green-200'
-                                                : 'bg-gray-50 text-gray-400 border-gray-200'
-                                        }`}>
-                                            {app.status === 'approved' ? '승인됨' : '거절됨'}
-                                        </span>
+                                        <div className="flex flex-col items-end gap-1 w-full">
+                                            <span className={`px-4 py-2 rounded-xl text-sm font-bold border w-full text-center ${
+                                                app.status === 'APPROVED'
+                                                    ? 'bg-green-50 text-green-600 border-green-200'
+                                                    : 'bg-gray-50 text-gray-400 border-gray-200'
+                                            }`}>
+                                                {app.status === 'APPROVED' ? '승인됨' : '거절됨'}
+                                            </span>
+                                            {app.rejectReason && (
+                                                <span className="text-xs text-red-400 text-right leading-tight">{app.rejectReason}</span>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             </div>

@@ -113,7 +113,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
       // 재접속 시 누락 메시지 동기화
       if (lastSeqRef.current > 0) {
         console.log('[Sync] 재접속 감지, lastSeq:', lastSeqRef.current);
-        chatApi.syncMessages(roomId, lastSeqRef.current)
+        chatApi.getMessages(roomId, lastSeqRef.current)
           .then((res: any) => {
             const missed = res.messages || [];
             if (missed.length > 0) {
@@ -220,7 +220,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, mentorId,
 
         // 2. 기존 메시지 로드
         try {
-          const historyRes = await chatApi.getRecentMessages(roomId);
+          const historyRes = await chatApi.getMessages(roomId);
           const messages = historyRes.messages || [];
           if (Array.isArray(messages) && messages.length > 0) {
             const mapped = messages.map((m: any) => mapMessage(m));
