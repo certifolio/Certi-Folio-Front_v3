@@ -88,15 +88,28 @@ export const mentoringApplicationApi = {
 // ===== Admin =====
 
 export const adminMentorApi = {
-    /** [어드민] 전체 멘토 신청 목록 조회 - GET /api/mentors/admin/applications */
-    getApplications: () =>
-        apiClient.get('/api/mentors/admin/applications'),
+    /**
+     * [어드민] 멘토 신청 목록 조회
+     * GET /api/admin/mentors?status=PENDING|APPROVED|REJECTED (생략 시 전체)
+     * 응답: { mentors: AdminMentorListItem[], total: number }
+     */
+    getApplications: (status?: 'PENDING' | 'APPROVED' | 'REJECTED') => {
+        const qs = status ? `?status=${status}` : '';
+        return apiClient.get(`/api/admin/mentors${qs}`);
+    },
 
-    /** [어드민] 멘토 승인 - POST /api/mentors/admin/:id/approve */
-    approve: (id: number) =>
-        apiClient.post(`/api/mentors/admin/${id}/approve`),
+    /**
+     * [어드민] 멘토 신청 승인
+     * PATCH /api/admin/mentors/:mentorId/approve
+     */
+    approve: (mentorId: number) =>
+        apiClient.patch(`/api/admin/mentors/${mentorId}/approve`),
 
-    /** [어드민] 멘토 거절 - POST /api/mentors/admin/:id/reject */
-    reject: (id: number) =>
-        apiClient.post(`/api/mentors/admin/${id}/reject`),
+    /**
+     * [어드민] 멘토 신청 거절
+     * PATCH /api/admin/mentors/:mentorId/reject
+     * body: { reason?: string }
+     */
+    reject: (mentorId: number, reason?: string) =>
+        apiClient.patch(`/api/admin/mentors/${mentorId}/reject`, { reason }),
 };
